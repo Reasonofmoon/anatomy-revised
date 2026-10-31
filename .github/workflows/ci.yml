@@ -15,15 +15,26 @@ concurrency:
 
 jobs:
   examples:
-    name: Rebuild the examples
-    runs-on: macos-latest
+    name: Rebuild the examples (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
+      - name: Install Chrome
+        if: runner.os == 'Linux'
+        run: |
+          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get update
+          sudo apt-get install -y /tmp/chrome.deb fonts-nanum
 
       - name: Regression tests
         run: |
@@ -77,5 +88,32 @@ jobs:
       - name: Committed pages are unchanged
         run: |
           git status --short
-          git diff --stat --exit-code
+          if ! git diff --quiet; then
+            git diff --numstat
+            python3 - << 'PY'
+          import subprocess
+          diff = subprocess.check_output(["git", "diff", "-U0"], text=True, errors="replace")
+          minus = plus = None
+          shown = 0
+          for line in diff.splitlines():
+              if line.startswith("diff --git"):
+                  print(line)
+                  minus = plus = None
+              elif line.startswith("-") and not line.startswith("---"):
+                  minus = line[1:]
+              elif line.startswith("+") and not line.startswith("+++") and minus is not None:
+                  plus = line[1:]
+                  for i, (a, b) in enumerate(zip(minus, plus)):
+                      if a != b:
+                          print("at", i, repr(minus[max(0, i - 50):i + 50]), "=>", repr(plus[max(0, i - 50):i + 50]))
+                          shown += 1
+                          break
+                  else:
+                      print("length", len(minus), len(plus))
+                  minus = None
+                  if shown >= 4:
+                      break
+          PY
+            exit 1
+          fi
           test -z "$(git status --porcelain)"

@@ -176,7 +176,8 @@ const BASE_CSS = (paper) => `
 html,body{margin:0;padding:0;background:#e9e9e6}
 body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .iso[data-theme="light"]{--anatomy-paper:#ffffff;--anatomy-card:#ffffff;--anatomy-face:#ffffff}
-.ps{width:${paper.w}mm;height:${paper.h}mm;margin:0 auto;background:#fff;overflow:hidden;color:#151517;padding:${MARGIN}mm ${MARGIN}mm 12mm;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;break-after:page;position:relative}
+@font-face{font-family:"Anatomy Hangul";src:local("NanumGothic"),local("Nanum Gothic"),local("Noto Sans KR"),local("NotoSansKR-Regular"),local("Apple SD Gothic Neo"),local("Malgun Gothic")}
+.ps{width:${paper.w}mm;height:${paper.h}mm;margin:0 auto;background:#fff;overflow:hidden;color:#151517;padding:${MARGIN}mm ${MARGIN}mm 12mm;font-family:"Anatomy Hangul","NanumGothic","Noto Sans KR","Noto Sans CJK KR","Source Han Sans KR","Apple SD Gothic Neo","Malgun Gothic","Helvetica Neue",Helvetica,Arial,sans-serif;break-after:page;position:relative;word-break:keep-all}
 .ps:last-of-type{break-after:auto}
 @media screen{html:not(.ps-bare) .ps{margin:10mm auto;box-shadow:0 1px 2px #0002,0 8px 30px #0001}html.ps-bare,html.ps-bare body{background:#fff}}
 @media print{html,body{background:#fff}.ps{margin:0;box-shadow:none}}
@@ -201,7 +202,7 @@ function posterPage(ctx, paper) {
   const css = `
 .pp{display:grid;grid-template-columns:54mm 1fr;grid-template-rows:auto minmax(0,1fr) auto auto;column-gap:8mm}
 .pp-mast{grid-column:1/-1;display:flex;align-items:flex-end;justify-content:space-between;gap:6mm}
-.pp-mast h1{margin:0;font-size:52pt;line-height:.86;font-weight:500;letter-spacing:-.045em}
+.pp-mast h1{margin:0;font-size:52pt;line-height:1.08;font-weight:500;letter-spacing:-.045em;word-break:keep-all}
 .pp-mast .ps-mono{text-align:right}
 .pp-side{padding-top:10mm;display:flex;flex-direction:column}
 .pp-q{font-size:12pt;line-height:1.15;font-weight:500;letter-spacing:-.01em;margin:0 0 3mm}
@@ -331,7 +332,7 @@ function detailedPages(ctx, paper) {
 ${wideMain ? ".pe-left>.pe-art{flex:0 0 auto}.pe-left>.pe-art>.ps-fit{height:auto;container-type:normal}.pe-left .ps-fig{width:100%}.pe-left .pe-sub{margin-top:8mm}" : ""}
 .pe-left>.pe-art{flex:1;min-height:0}
 .pe-mast{grid-column:1/-1;display:flex;align-items:flex-end;justify-content:space-between;gap:6mm;padding-bottom:5mm;border-bottom:.15mm solid #151517}
-.pe-mast h1{margin:0;font-size:40pt;line-height:.9;font-weight:500;letter-spacing:-.04em}
+.pe-mast h1{margin:0;font-size:40pt;line-height:1.08;font-weight:500;letter-spacing:-.04em;word-break:keep-all}
 .pe-mast .ps-mono{text-align:right}
 .pe-art{padding-top:7mm}
 .pe-art>.ps-fit{width:100%;height:100%}

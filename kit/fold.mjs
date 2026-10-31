@@ -59,7 +59,7 @@ export function foldLayerHtml({ blocks = [], labels = {}, state = "unfolded", fo
   const text = { ...FOLD_LABELS, ...labels };
   const pill = state === "folded" ? text.folded : text.unfolded;
   const button = state === "folded" ? text.unfold : text.fold;
-  return `<div class="fn-layer" data-fold-layer data-fold-state="${escapeHtml(state)}" data-fold-phase="flat"><div class="fn-top" data-important="controls"><div class="fn-badges"><span class="fn-pill" data-fold-pill>${escapeHtml(pill)}</span>${formula ? `<span class="fn-formula" data-fold-formula>${escapeHtml(formula)}</span>` : `<span class="fn-formula" data-fold-formula></span>`}</div><button type="button" class="fn-toggle" data-fold-toggle><span data-fold-btn>${escapeHtml(button)}</span><kbd class="fn-kbd">${escapeHtml(text.kbd)}</kbd></button></div><div class="fn-center" data-fold-center><div class="fn-nets" data-fold-nets>${foldNetsHtml(blocks, text)}</div></div><p class="fn-hint" data-fold-hint>${escapeHtml(text.hint)}</p></div>`;
+  return `<div class="fn-layer" data-fold-layer data-fold-state="${escapeHtml(state)}" data-fold-phase="flat"><div class="fn-top" data-important="controls"><div class="fn-badges"><span class="fn-pill" data-fold-pill>${escapeHtml(pill)}</span>${formula ? `<span class="fn-formula" data-fold-formula>${escapeHtml(formula)}</span>` : `<span class="fn-formula" data-fold-formula></span>`}</div><button type="button" class="fn-toggle" data-fold-toggle><span data-fold-btn>${escapeHtml(button)}</span><kbd class="fn-kbd">${escapeHtml(text.kbd)}</kbd></button></div><div class="fn-center" data-fold-center><div class="fn-nets" data-fold-nets>${foldNetsHtml(blocks, text)}</div></div><p class="fn-hint" data-fold-hint data-important="hint">${escapeHtml(text.hint)}</p></div>`;
 }
 
 export function foldCss() {
@@ -103,7 +103,7 @@ export function foldCss() {
 .fn-legend-word{font-size:32px;font-weight:800;line-height:1.15;color:var(--fn-ink)}
 .fn-legend-role{font-size:15px;font-weight:700;color:var(--fn-sub)}
 @media (prefers-reduced-motion:reduce){.fn-net,.fn-flap,.fn-stage>.iso-svg{transition:none!important}.fn-legend{display:flex}}
-@media (max-width:640px){.fn-nets{flex-wrap:wrap}.fn-net{margin:18px 12px 24px;flex:1 1 130px!important}.fn-layer[data-fold-state="folded"] .fn-center,.fn-layer[data-fold-state="folded"] .fn-hint{display:none}}
+@media (max-width:640px){.fn-nets{flex-wrap:wrap}.fn-net{margin:18px 12px 24px;flex:1 1 130px!important}.fn-layer[data-fold-state="folded"] .fn-center,.fn-layer[data-fold-state="folded"] .fn-hint{display:none}.fn-stage[data-stage-fold="unfolded"]{min-height:520px}.fn-stage[data-stage-fold="unfolded"]>.iso-svg{position:absolute;inset:0;width:100%;height:100%}.fn-stage[data-stage-fold="unfolded"] .fn-layer{position:relative;min-height:520px}.fn-stage[data-stage-fold="unfolded"] .an-callout{display:none}}
 `;
 }
 
@@ -124,10 +124,14 @@ let foldState = still.matches ? "folded" : (FOLD.initial || "unfolded");
 let timerA = 0;
 let timerB = 0;
 const esc = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-function render(next) {
+function render(next, extra) {
+  if (extra && typeof extra === "object") {
+    if (extra.formula != null) FOLD.formula = String(extra.formula);
+    if (extra.labels) Object.assign(labels, extra.labels);
+  }
   blocks = next || blocks;
-  if (!netsEl) return;
-  if (formulaEl && FOLD.formula) formulaEl.textContent = FOLD.formula;
+  if (formulaEl) formulaEl.textContent = FOLD.formula || "";
+  if (!netsEl) return foldState;
   const glue = esc(labels.glue);
   netsEl.innerHTML = blocks.map((block, index) => {
     const shades = block.shades || [];
@@ -139,6 +143,15 @@ function render(next) {
     const note = block.note ? "<div class=\\"fn-note\\">" + esc(block.note) + "</div>" : "";
     return "<div class=\\"fn-net\\" data-net=\\"" + esc(block.id ?? index) + "\\" data-role=\\"" + esc(block.role || "") + "\\" data-slot=\\"" + esc(block.slot ?? index) + "\\"" + compact + important + " style=\\"flex:" + weight.toFixed(2) + " 1 0%;" + style + "\\"><div class=\\"fn-flap fn-flap-top\\"><div class=\\"fn-glue\\">" + glue + "</div></div><div class=\\"fn-flap fn-flap-left\\"></div><div class=\\"fn-flap fn-flap-right\\"></div><div class=\\"fn-main\\"><div class=\\"fn-word\\" data-legible data-net-word>" + esc(block.text) + "</div><div class=\\"fn-role\\">" + esc(block.label || "") + "</div>" + note + "</div><div class=\\"fn-flap fn-flap-bottom\\"><span class=\\"fn-slot-tag\\">" + esc(block.key || block.slot || "") + "</span></div></div>";
   }).join("");
+  const legend = document.querySelector("[data-fold-legend]");
+  if (legend) legend.innerHTML = blocks.map((block) => {
+    const shades = block.shades || [];
+    const paint = [0, 1, 2, 3].map((i) => shades[i] || block.fill || "#eee");
+    const style = "--fn-fill:" + (block.fill || "#fff") + ";--fn-top:" + (block.top || block.fill || "#fff") + ";--fn-edge:" + (block.edge || "#222") + ";--fn-ink:" + (block.ink || "#111") + ";--fn-sub:" + (block.sub || block.ink || "#333") + ";--fn-0:" + paint[0] + ";--fn-1:" + paint[1] + ";--fn-2:" + paint[2] + ";--fn-3:" + paint[3];
+    const important = block.important ? " data-important=\\"" + esc(block.important) + "\\"" : "";
+    return "<div class=\\"fn-legend-item\\" data-role=\\"" + esc(block.role || "") + "\\"" + important + " style=\\"" + style + "\\"><div class=\\"fn-legend-word\\" data-legible>" + esc(block.text) + "</div><div class=\\"fn-legend-role\\">" + esc(block.label || "") + "</div></div>";
+  }).join("");
+  return foldState;
 }
 function drops() {
   if (!netsEl || !svg) return;
@@ -177,37 +190,33 @@ function setFoldState(next, immediate) {
     if (calm) stage.setAttribute("data-fold-instant", "");
     else stage.removeAttribute("data-fold-instant");
   }
-  if (next === "unfolded" && !still.matches) {
-    paint("unfolded");
-    announce();
-    return;
-  }
-  if (calm || next !== "folded") {
-    paint(next === "unfolded" ? "unfolded" : "folded");
-    announce();
-    return;
-  }
+  const finish = (state) => { paint(state); announce(); return foldState; };
+  if (next === "unfolded" && !still.matches) return finish("unfolded");
+  if (calm || next !== "folded") return finish(next === "unfolded" ? "unfolded" : "folded");
   drops();
   paint("folding");
   if (layer) layer.setAttribute("data-fold-phase", "hinge");
   if (stage) stage.setAttribute("data-stage-fold", "folding");
-  timerA = setTimeout(() => {
-    if (layer) layer.setAttribute("data-fold-phase", "drop");
-    if (stage) stage.setAttribute("data-stage-fold", "folded");
-  }, 270);
-  timerB = setTimeout(() => {
-    paint("folded");
-    announce();
-  }, 590);
+  return new Promise((resolve) => {
+    timerA = setTimeout(() => {
+      if (layer) layer.setAttribute("data-fold-phase", "drop");
+      if (stage) stage.setAttribute("data-stage-fold", "folded");
+    }, 270);
+    timerB = setTimeout(() => {
+      paint("folded");
+      announce();
+      resolve(foldState);
+    }, 590);
+  });
 }
 function toggleFold() {
-  setFoldState(foldState === "unfolded" ? "folded" : "unfolded", false);
+  return setFoldState(foldState === "unfolded" ? "folded" : "unfolded", false);
 }
 window.__fold = {
   get state() { return foldState; },
-  set(next, immediate = false) { setFoldState(next, immediate); },
+  set(next, immediate = false) { return setFoldState(next, immediate); },
   toggle: toggleFold,
-  render(next) { render(next); announce(); },
+  render(next, extra) { const state = render(next, extra); announce(); return state; },
 };
 render(blocks);
 setFoldState(foldState, true);

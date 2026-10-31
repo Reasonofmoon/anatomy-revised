@@ -67,9 +67,10 @@ The audit sees recorded shapes, never line markup, so it can't see a seam, rule,
 node scripts/lines.mjs page.html --out shots/lines.png
 node scripts/lines.mjs page-light.html --out shots/lines-light.png --reduced
 node scripts/drive.mjs page.html '[["key"," "],["wait",2000],["lines","shots/lines-apart.png"]]'
-node scripts/lines.mjs page.html --eval "window.__fold.set('folded', true)"
+node scripts/lines.mjs page.html --state folded
+node scripts/lines.mjs page.html --state unfolded
 ```
-`lines: EMPTY — 0 candidate lines` is a failure, not a pass. It is what a dimmed fold layer or a selector with no `.iso-line` used to report as `0 of 0`. Hidden marks are counted in the same line (`N .iso-line marks were hidden`). `--eval` and `--eval-file` run before the check so you can select folded or unfolded. `--allow-empty` turns the empty result into a warning. The same run fails when a visible `data-legible` word (every fold-layer word) is under 28px at a desktop width, or under 16px below 1100px, and when a `data-callout` covers 8% or more of a `data-important` part. Engraved `.iso-face-text` under 12px is a warning. `capture.mjs` prints the same text check and exits 1 on a teaching-text failure.
+`lines: EMPTY — 0 candidate lines` is a failure, not a pass. It is what a dimmed fold layer or a selector with no `.iso-line` used to report as `0 of 0`. Hidden marks are counted in the same line (`N .iso-line marks were hidden`). `--state folded` and `--state unfolded` set the fold immediately and then wait. Unfolded prints `lines: unfolded` and checks the nets and callouts instead of failing on the dimmed drawing. `--eval` and `--eval-file` run after that wait; the hook should return JSON (`window.__fold.set` returns the state). An undefined result is not printed. `--allow-empty` turns a genuinely empty result into a warning. The same run fails when a visible `data-legible` word (every fold-layer word) is under 28px at a desktop width, or under 16px below 1100px, and when a `data-callout` covers 8% or more of a `data-important` part. Engraved `.iso-face-text` under 12px is a warning; several of them on one viewport are reported as one range. `capture.mjs` prints the same text check and exits 1 on a teaching-text failure. A second positional argument is the output path (`capture.mjs page.html shots/card.png`).
 ```
 line ends: 3 of 1148 ends on 295 lines float
   iso-line faint in it k -0.080  end  7.25 px from anything   at card 507.4,407.2   length 75.7   d M392.1 381.7L507.4 407.2…

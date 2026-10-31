@@ -71,7 +71,10 @@ async function browser(target, { width, height, scale, throttle, noWebgl }) {
     if (data.id && pending.has(data.id)) {
       pending.get(data.id)(data);
       pending.delete(data.id);
-    } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) problems.push(`console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}`);
+    } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) {
+      const text = data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").trim();
+      if (text) problems.push(`console.${data.params.type}: ${text.slice(0, 400)}`);
+    }
     else if (data.method === "Runtime.exceptionThrown") problems.push(`exception: ${data.params.exceptionDetails.exception?.description ?? data.params.exceptionDetails.text}`.slice(0, 400));
   };
   await new Promise((done) => (socket.onopen = done));
@@ -88,6 +91,7 @@ async function browser(target, { width, height, scale, throttle, noWebgl }) {
   };
   await send("Runtime.enable");
   await send("Page.enable");
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   const NO_GL = `(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...rest){if(/webgl/.test(String(kind))&&!this.dataset.check)return null;return get.call(this,kind,...rest)}})();`;
   if (noWebgl) await send("Page.addScriptToEvaluateOnNewDocument", { source: NO_GL });
   await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 });

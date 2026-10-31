@@ -1,5 +1,5 @@
-import { spawn, spawnSync } from "node:child_process";
-import { chromePort } from "./chrome-port.mjs";
+import { spawn } from "node:child_process";
+import { chromePort, killChrome, removeProfile } from "./chrome-port.mjs";
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -24,8 +24,12 @@ function usage() {
   --out name    output base name (default: the spec's out, else the page name)
 
 Writes <name>-<format>-a4.html and .pdf next to the spec. poster, drawing and detailed are unchanged.
-Chrome --print-to-pdf is killed if it is still running after ANATOMY_PRINT_TIMEOUT_MS (default 20s) and the PDF is
-printed with Page.printToPDF instead. If both fail, the script exits with both reasons instead of hanging.`);
+On Linux, Chrome --print-to-pdf hangs, so the PDF is printed with Page.printToPDF directly (set
+ANATOMY_PRINT_FORCE_CLI=1 to try the flag anyway). Elsewhere the flag is killed after ANATOMY_PRINT_TIMEOUT_MS
+(default 20s) and Page.printToPDF runs with its own ANATOMY_PRINT_FALLBACK_TIMEOUT_MS (default 20s). Lowering the
+first timeout does not shorten the fallback. If both fail, the script prints both reasons and exits. Pose capture
+through drive.mjs is killed, process group included, after 120s. node scripts/drive.mjs --clean-profiles deletes
+leftover /tmp/iso-drive-* directories.`);
 }
 
 export function chromePath() {
@@ -135,25 +139,49 @@ export function captureScript(spec) {
 })()`;
 }
 
-function drive(page, actions, { reduced, width, height }) {
-  const profile = mkdtempSync(join(tmpdir(), "iso-print-"));
+export function drive(page, actions, { reduced, width, height, timeoutMs = 120000 }) {
+  const profile = mkdtempSync(join(tmpdir(), "iso-drive-"));
   const file = join(profile, "actions.json");
   writeFileSync(file, JSON.stringify(actions));
-  const args = [DRIVE, page, "--actions", file, "--width", String(width), "--height", String(height)];
+  const args = [DRIVE, page, "--actions", file, "--profile", profile, "--width", String(width), "--height", String(height)];
   if (reduced) args.push("--reduced");
   const log = join(profile, "out.txt");
   const fd = openSync(log, "w");
-  const run = spawnSync(process.execPath, args, { stdio: ["ignore", fd, "pipe"], encoding: "utf8", maxBuffer: 1 << 26, timeout: 120000, killSignal: "SIGKILL" });
-  closeSync(fd);
-  const stdout = readFileSync(log, "utf8");
-  rmSync(profile, { recursive: true, force: true });
-  if (run.error?.code === "ETIMEDOUT") throw new Error("drive.mjs timed out after 120s while capturing poses. The print did not hang; the pose capture was killed.");
-  if (run.error) throw new Error(`drive.mjs failed: ${run.error.message}`);
-  if (run.status !== 0) throw new Error(`drive.mjs failed:\n${(run.stderr || stdout || "").slice(-2000)}`);
-  return stdout
-    .split("\n")
-    .filter((line) => line.startsWith("eval: "))
-    .map((line) => JSON.parse(line.slice(6)));
+  const waited = timeoutMs >= 1000 ? `${Math.round(timeoutMs / 1000)}s` : `${timeoutMs} ms`;
+  const timedOut = () => new Error(`drive.mjs timed out after ${waited} while capturing poses. The print did not hang; the pose capture was killed.`);
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, args, { stdio: ["ignore", fd, "pipe"], detached: true });
+    let stderr = "";
+    let settled = false;
+    let killing = false;
+    child.stderr?.on("data", (chunk) => { stderr += chunk; });
+    const stop = (signal) => {
+      try { process.kill(-child.pid, signal); } catch { try { child.kill(signal); } catch { /* already gone */ } }
+      killChrome(null, profile);
+    };
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { closeSync(fd); } catch { /* closed */ }
+      const stdout = existsSync(log) ? readFileSync(log, "utf8") : "";
+      stop("SIGKILL");
+      removeProfile(profile);
+      if (error) reject(error);
+      else resolve(value ?? parseEvalOutput(stdout));
+    };
+    const timer = setTimeout(() => {
+      killing = true;
+      stop("SIGTERM");
+      setTimeout(() => finish(timedOut()), 400);
+    }, timeoutMs);
+    child.on("error", (error) => finish(new Error(`drive.mjs failed: ${error.message}`)));
+    child.on("exit", (code, signal) => {
+      if (killing || signal) finish(timedOut());
+      else if (code !== 0) finish(new Error(`drive.mjs failed:\n${(stderr || (existsSync(log) ? readFileSync(log, "utf8") : "")).slice(-2000)}`));
+      else finish(null);
+    });
+  });
 }
 
 export async function capture(spec, pagePath) {
@@ -162,7 +190,7 @@ export async function capture(spec, pagePath) {
   const script = captureScript(spec);
   const actions = [["wait", spec.settle ?? 1200]];
   for (const [, view] of views) actions.push(...(view.actions ?? []), ["eval", script], ...(view.reset ?? []));
-  const results = drive(pagePath, actions, options).filter((result) => result && result.__print);
+  const results = (await drive(pagePath, actions, options)).filter((result) => result && result.__print);
   if (results.length !== views.length) throw new Error(`expected ${views.length} captures, got ${results.length}`);
   const out = { views: {}, css: "" };
   results.forEach((result, index) => {
@@ -187,7 +215,7 @@ export async function capture(spec, pagePath) {
       }
       shots.push(...(view.reset ?? []));
     }
-    drive(pagePath, shots, options);
+    await drive(pagePath, shots, options);
     for (const [name] of rasters) {
       const raster = out.views[name].raster;
       if (!existsSync(raster.file)) throw new Error(`raster shot for ${name} was not written`);
@@ -199,20 +227,31 @@ export async function capture(spec, pagePath) {
   return out;
 }
 
-function killGroup(child) {
-  if (!child?.pid) return;
-  if (process.platform === "win32") {
-    spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
-    return;
-  }
-  try {
-    process.kill(-child.pid, "SIGKILL");
-  } catch {
-    try { child.kill("SIGKILL"); } catch { /* already gone */ }
-  }
+function killGroup(child, profile) {
+  killChrome(child, profile);
 }
 
-export function runProcess(binary, args, timeoutMs) {
+export function printTimeouts(options = {}) {
+  const cli = Number(options.timeoutMs ?? process.env.ANATOMY_PRINT_TIMEOUT_MS ?? 20000);
+  const fallback = Number(options.fallbackTimeoutMs ?? process.env.ANATOMY_PRINT_FALLBACK_TIMEOUT_MS ?? 20000);
+  return { cli, fallback };
+}
+
+export function parseEvalOutput(stdout) {
+  const results = [];
+  for (const line of String(stdout).split("\n")) {
+    if (!line.startsWith("eval: ")) continue;
+    const raw = line.slice(6);
+    if (!raw || raw === "undefined") continue;
+    try { results.push(JSON.parse(raw)); } catch { /* an eval that did not return JSON is not a capture */ }
+  }
+  return results;
+}
+
+let cliHangs = process.platform === "linux" && process.env.ANATOMY_PRINT_FORCE_CLI !== "1";
+let skipWarned = false;
+
+export function runProcess(binary, args, timeoutMs, profile) {
   return new Promise((resolve) => {
     const child = spawn(binary, args, { stdio: "ignore", detached: true });
     let settled = false;
@@ -223,7 +262,7 @@ export function runProcess(binary, args, timeoutMs) {
       resolve(result);
     };
     const timer = setTimeout(() => {
-      killGroup(child);
+      killGroup(child, profile);
       finish({ ok: false, reason: `timed out after ${timeoutMs} ms and was killed` });
     }, timeoutMs);
     child.on("error", (error) => finish({ ok: false, reason: error.message }));
@@ -249,8 +288,8 @@ async function printPdfViaCli(htmlFile, pdfFile, { timeoutMs }) {
   if (!binary) return { ok: false, reason: "No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary." };
   const profile = mkdtempSync(join(tmpdir(), "iso-print-pdf-"));
   if (existsSync(pdfFile)) rmSync(pdfFile);
-  const run = await runProcess(binary, [...chromeLaunch(profile), "--no-pdf-header-footer", `--print-to-pdf=${pdfFile}`, pathToFileURL(htmlFile).href], timeoutMs);
-  try { rmSync(profile, { recursive: true, force: true }); } catch { /* chrome may still be releasing the profile */ }
+  const run = await runProcess(binary, [...chromeLaunch(profile), "--no-pdf-header-footer", `--print-to-pdf=${pdfFile}`, pathToFileURL(htmlFile).href], timeoutMs, profile);
+  removeProfile(profile);
   const info = pdfInfo(pdfFile);
   if (!run.ok || !info.pdf) {
     if (existsSync(pdfFile)) rmSync(pdfFile);
@@ -264,8 +303,8 @@ async function printPngViaCli(htmlFile, pngFile, { timeoutMs, paper, pages }) {
   if (!binary || !paper) return { ok: false, reason: "no Chrome or paper size for the preview" };
   const profile = mkdtempSync(join(tmpdir(), "iso-print-png-"));
   if (existsSync(pngFile)) rmSync(pngFile);
-  const run = await runProcess(binary, [...chromeLaunch(profile), "--force-device-scale-factor=2", `--window-size=${paper.px[0]},${paper.px[1] * pages}`, `--screenshot=${pngFile}`, `${pathToFileURL(htmlFile).href}?print`], timeoutMs);
-  try { rmSync(profile, { recursive: true, force: true }); } catch { /* profile cleanup is best-effort */ }
+  const run = await runProcess(binary, [...chromeLaunch(profile), "--force-device-scale-factor=2", `--window-size=${paper.px[0]},${paper.px[1] * pages}`, `--screenshot=${pngFile}`, `${pathToFileURL(htmlFile).href}?print`], timeoutMs, profile);
+  removeProfile(profile);
   if (!run.ok || !existsSync(pngFile) || statSync(pngFile).size < 100) return { ok: false, reason: run.reason || "Chrome did not write the preview" };
   return { ok: true };
 }
@@ -275,13 +314,13 @@ async function printPdfViaCdp(htmlFile, pdfFile, { png, paper, pages: expected =
   const binary = chromePath();
   if (!binary) return { ok: false, reason: "No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary." };
   const profile = mkdtempSync(join(tmpdir(), "iso-print-cdp-"));
-  const chrome = spawn(binary, ["--headless=new", ...(process.platform === "linux" ? ["--no-sandbox"] : []), "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--allow-file-access-from-files", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
-  const timer = setTimeout(() => killGroup(chrome), timeoutMs);
+  const chrome = spawn(binary, ["--headless=new", ...(process.platform === "linux" ? ["--no-sandbox"] : []), "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--allow-file-access-from-files", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"], { detached: true, stdio: ["ignore", "ignore", "pipe"] });
+  const timer = setTimeout(() => killGroup(chrome, profile), timeoutMs);
   const fail = (reason) => {
     clearTimeout(timer);
-    killGroup(chrome);
-    try { rmSync(profile, { recursive: true, force: true }); } catch { /* already removed */ }
-    return { ok: false, reason };
+    killGroup(chrome, profile);
+    removeProfile(profile);
+    return { ok: false, reason: String(reason).split("\n")[0] };
   };
   try {
     const port = await chromePort(chrome, profile);
@@ -334,8 +373,8 @@ async function printPdfViaCdp(htmlFile, pdfFile, { png, paper, pages: expected =
     }
     socket.close();
     clearTimeout(timer);
-    killGroup(chrome);
-    try { rmSync(profile, { recursive: true, force: true }); } catch { /* profile cleanup is best-effort */ }
+    killGroup(chrome, profile);
+    removeProfile(profile);
     if (pdf) {
       const info = pdfInfo(pdfFile);
       if (!info.pdf) return { ok: false, reason: "Page.printToPDF wrote no usable PDF" };
@@ -348,32 +387,53 @@ async function printPdfViaCdp(htmlFile, pdfFile, { png, paper, pages: expected =
 }
 
 export async function printPdf(htmlFile, pdfFile, options = {}) {
-  const timeoutMs = options.timeoutMs ?? Number(process.env.ANATOMY_PRINT_TIMEOUT_MS || 20000);
-  const cli = options.cli ?? ((file, out) => printPdfViaCli(file, out, { timeoutMs }));
-  const cdp = options.cdp ?? ((file, out, pngPath) => printPdfViaCdp(file, out, { png: pngPath, paper: options.paper, pages: options.pages, timeoutMs }));
-  const cliResult = await cli(htmlFile, pdfFile, options);
+  const timeouts = printTimeouts(options);
+  const forceCli = options.forceCli || process.env.ANATOMY_PRINT_FORCE_CLI === "1";
+  const cli = options.cli ?? ((file, out) => printPdfViaCli(file, out, { timeoutMs: timeouts.cli }));
+  const cdp = options.cdp ?? ((file, out, pngPath) => printPdfViaCdp(file, out, { png: pngPath, paper: options.paper, pages: options.pages, timeoutMs: timeouts.fallback }));
+  let cliResult;
+  if (!options.cli && cliHangs && !forceCli) {
+    if (!skipWarned) {
+      skipWarned = true;
+      console.warn("print: Chrome --print-to-pdf hangs on this platform; using Page.printToPDF");
+    }
+    cliResult = { ok: false, reason: "skipped", skipped: true };
+  } else {
+    cliResult = await cli(htmlFile, pdfFile, options);
+    if (!options.cli && !cliResult?.ok && /timed out/.test(cliResult?.reason || "")) cliHangs = true;
+  }
   if (cliResult?.ok) {
     if (options.png && !options.cli) {
-      const shot = await printPngViaCli(htmlFile, options.png, { timeoutMs, paper: options.paper, pages: options.pages ?? 1 });
+      const shot = await printPngViaCli(htmlFile, options.png, { timeoutMs: timeouts.cli, paper: options.paper, pages: options.pages ?? 1 });
       if (!shot.ok) {
         console.warn(`print: preview screenshot failed (${shot.reason}); using Page.captureScreenshot`);
-        const preview = await printPdfViaCdp(htmlFile, pdfFile, { png: options.png, paper: options.paper, pages: options.pages, timeoutMs, pdf: false });
+        const preview = await printPdfViaCdp(htmlFile, pdfFile, { png: options.png, paper: options.paper, pages: options.pages, timeoutMs: timeouts.fallback, pdf: false });
         if (!preview.ok) console.warn(`print: preview was not written (${preview.reason})`);
       }
     }
     return { pages: cliResult.pages, bytes: cliResult.bytes, via: cliResult.via || "cli" };
   }
   const reason = cliResult?.reason || "Chrome --print-to-pdf failed";
-  console.warn(`print: Chrome --print-to-pdf failed (${reason}); falling back to Page.printToPDF`);
+  if (!cliResult?.skipped) console.warn(`print: Chrome --print-to-pdf failed (${reason}); falling back to Page.printToPDF`);
   if (existsSync(pdfFile)) rmSync(pdfFile);
   const cdpResult = await cdp(htmlFile, pdfFile, options.png || null);
   if (!cdpResult?.ok) {
-    throw new Error(`print: no PDF was written for ${pdfFile}.\n  Chrome --print-to-pdf: ${reason}\n  Page.printToPDF: ${cdpResult?.reason || "failed"}\n  poster, drawing and detailed are unchanged; printing stopped instead of hanging.`);
+    throw new Error(`print: no PDF was written for ${pdfFile}.\n  Chrome --print-to-pdf: ${reason}\n  Page.printToPDF: ${cdpResult?.reason || "failed"}\n  Printing stopped instead of hanging.`);
   }
   return { pages: cdpResult.pages, bytes: cdpResult.bytes, via: "cdp" };
 }
 
 async function main() {
+  try {
+    await printMain();
+  } catch (error) {
+    const message = error?.message || String(error);
+    console.error(message.startsWith("print:") || message.startsWith("drive.mjs") ? message : `print: ${message}`);
+    process.exit(1);
+  }
+}
+
+async function printMain() {
   const argv = process.argv.slice(2);
   if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
     usage();
@@ -411,7 +471,14 @@ async function main() {
     const pdfFile = join(dir, `${name}.pdf`);
     const png = options.png ? join(dir, `${name}.png`) : null;
     const expected = pagesOf(format, spec);
-    const { pages, bytes, via } = await printPdf(htmlFile, pdfFile, { png, paper, pages: expected });
+    let printed;
+    try {
+      printed = await printPdf(htmlFile, pdfFile, { png, paper, pages: expected });
+    } catch (error) {
+      const message = error?.message || String(error);
+      throw new Error(`${message}\n  HTML was written to ${htmlFile}; the PDF was not.`);
+    }
+    const { pages, bytes, via } = printed;
     const how = via === "cdp" ? " via Page.printToPDF" : " via --print-to-pdf";
     console.log(`wrote ${name}.html (${(html.length / 1024).toFixed(0)} KB) and ${name}.pdf (${(bytes / 1024).toFixed(0)} KB, ${pages} page${pages === 1 ? "" : "s"})${png ? ` and ${name}.png` : ""}${how}`);
     if (pages !== expected) {

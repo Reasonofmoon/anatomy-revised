@@ -137,3 +137,13 @@ test("detailed grows from 2 to 4 pages with steps and assemblies, under a cap", 
   assert.equal((html.match(/<main class="ps /g) ?? []).length, 3);
   assert.ok(html.includes("Assemblies") && html.includes("1 / 3"));
 });
+
+test("poster titles keep wrapped CJK from colliding and prefer an outline Korean font", () => {
+  const html = sheetHtml(fakeCapture(), { ...SPEC, name: "문장 조립 라인" }, PAPER.a4, "poster");
+  assert.match(html, /line-height:1\.08/);
+  assert.doesNotMatch(html, /line-height:\.86/);
+  assert.match(html, /word-break:keep-all/);
+  assert.match(html, /Anatomy Hangul/);
+  assert.match(html, /local\("NanumGothic"\)/);
+  assert.match(html, /문장 조립 라인/);
+});

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as k from "../../kit/iso-kit.mjs";
+import { stableJson } from "../../kit/stable-json.mjs";
 import * as G from "../../kit/lathe.mjs";
 import { tubePieces, tubeSvg, crossingsOf } from "../../kit/tube.mjs";
 import * as A from "../../kit/audit.mjs";
@@ -930,7 +931,7 @@ const caption =
 const body = `<figure class="iso-figure rp"><div class="iso-plate">${existsSync(join(HERE, "raptor-engine-poster-a4.pdf")) ? pdfButton("raptor-engine-poster-a4.pdf") : ""}${corners}${stage}${controls}</div><figcaption class="iso-legend"><span class="rp-parts">${PARTS}</span><span class="iso-caption">${caption}</span></figcaption></figure>`;
 
 const CSS = readFileSync(join(HERE, "raptor.css"), "utf8");
-const LIVE = readFileSync(join(HERE, "live.js"), "utf8").replace("__DATA__", JSON.stringify(DATA));
+const LIVE = readFileSync(join(HERE, "live.js"), "utf8").replace("__DATA__", stableJson(DATA));
 const page = k.pageHtml({ title: "Raptor 2", theme: THEME, body: `<style>${CSS}</style>${body}`, script: glScript() + LIVE, width: 980 });
 const name = THEME === "light" ? "raptor-engine-light.html" : "raptor-engine.html";
 writeFileSync(join(HERE, name), page);

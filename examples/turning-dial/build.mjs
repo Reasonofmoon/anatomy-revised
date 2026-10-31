@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as k from "../../kit/iso-kit.mjs";
+import { stableJson } from "../../kit/stable-json.mjs";
 import * as G from "../../kit/lathe.mjs";
 import * as A from "../../kit/audit.mjs";
 import { turning } from "../../kit/turn-build.mjs";
@@ -456,7 +457,7 @@ const stage = `<div class="iso-stage iso-turn td-stage" tabindex="0" role="slide
 const DATA = { turn: out.data, index: INDEX_AT, pod: POD_AT, breakEnd: BREAK_END, links: LINKS, gl: { W: WIDTH, H: HEIGHT, camera: glCamera(P), led: LED[0], faceZ: FACE_Z, faceR: FACE_R, hubR: HUB_R, socket: [POD_AT[0], POD_AT[1], POD_AT[2]] } };
 const FOLLOW = `const follow = ${follow.toString()};\nconst tapAt = ${tapAt.toString()};\nconst breakAt = ${breakAt.toString()};`;
 const CSS = out.css + "\n" + readFileSync(join(HERE, "dial.css"), "utf8");
-const LIVE = readFileSync(join(HERE, "live.js"), "utf8").replace("__DATA__", JSON.stringify(DATA)).replace("const follow = null;", FOLLOW);
+const LIVE = readFileSync(join(HERE, "live.js"), "utf8").replace("__DATA__", stableJson(DATA)).replace("const follow = null;", FOLLOW);
 const body = k.plateHtml({
   fig: "Fig 3D",
   title: "Turning dial",
@@ -469,7 +470,7 @@ const body = k.plateHtml({
   caption: "The optional 3D mode: every part on the dial is re-projected and re-shaded each frame by the kit's own rules, and painted in an order solved from separating planes.",
   body: `<style>${CSS}</style>${stage}`,
 });
-const page = k.pageHtml({ title: "Turning dial", theme, body, script: turnScript() + glScript() + (verify ? `window.__isoVerify = ${JSON.stringify(out.verify)};\n` : "") + LIVE, width: 680 });
+const page = k.pageHtml({ title: "Turning dial", theme, body, script: turnScript() + glScript() + (verify ? `window.__isoVerify = ${stableJson(out.verify)};\n` : "") + LIVE, width: 680 });
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const name = `turning-dial${verify ? "-verify" : ""}${theme === "light" ? "-light" : ""}.html`;
   writeFileSync(join(HERE, name), page);

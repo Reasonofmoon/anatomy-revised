@@ -12,7 +12,9 @@ node scripts/print.mjs examples/arcade-cabinet/sheet.mjs --format detailed --let
 
 It writes `<out>-<format>-a4.pdf` and `.html` next to the spec (`-letter` with `--letter`), plus a preview `.png` with `--png`. It exits 1 when a format runs past its page count. The three formats are poster, drawing and detailed.
 
-Chrome's `--print-to-pdf` flag can hang on Linux when the sheet, or a page it captured, never goes idle. `print.mjs` kills that process after `ANATOMY_PRINT_TIMEOUT_MS` (default 20 seconds) and prints the same HTML with `Page.printToPDF`. The log says `via --print-to-pdf` or `via Page.printToPDF`. If both fail, the script exits with both reasons instead of waiting. Pose capture through `drive.mjs` is killed after 120 seconds with the same kind of error.
+Chrome's `--print-to-pdf` flag hangs on Linux, so `print.mjs` prints with `Page.printToPDF` there and does not wait out the flag (set `ANATOMY_PRINT_FORCE_CLI=1` to try it). Elsewhere the flag is killed after `ANATOMY_PRINT_TIMEOUT_MS` (default 20 seconds) and the same HTML is printed with `Page.printToPDF`, which has its own `ANATOMY_PRINT_FALLBACK_TIMEOUT_MS` (default 20 seconds). Lowering the first timeout does not shorten the fallback. The log says `via --print-to-pdf` or `via Page.printToPDF`. If both fail, the script prints both reasons, says when the HTML was written, and exits. It does not dump a stack trace. Pose capture through `drive.mjs` is killed after 120 seconds, Chrome included: the browser runs in that process group, and the `/tmp/iso-drive-*` profile is removed. `node scripts/drive.mjs --clean-profiles` deletes profiles left behind by an older run.
+
+An `eval` action should return JSON. `window.__fold.set` returns the state it landed on (a promise, if the fold is still animating). A hook that returns `undefined` is ignored, not parsed.
 
 ## The three formats
 

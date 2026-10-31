@@ -4,23 +4,37 @@ import * as G from "./lathe.mjs";
 import * as A from "./audit.mjs";
 
 const TAU = Math.PI * 2;
-const r4 = (v) => Math.round(v * 1e4) / 1e4;
-const r3 = (v) => Math.round(v * 1e3) / 1e3;
+const roundScaled = (scaled, band) => {
+  const half = Math.round(scaled * 2) / 2;
+  const snapped = Math.abs(half % 1) > 0.25 && Math.abs(scaled - half) < band ? half : scaled;
+  return Math.round(snapped);
+};
+const roundDigits = (digits) => (value) => {
+  if (!Number.isFinite(value)) return value;
+  const scale = 10 ** digits;
+  return roundScaled(value * scale, 0.49) / scale;
+};
+const r4 = roundDigits(4);
+const r3 = roundDigits(3);
 const pack3 = (value) => JSON.parse(JSON.stringify(value, (key, v) => (typeof v === "number" ? r3(v) : v instanceof Float64Array || v instanceof Float32Array ? Array.from(v, r3) : v)));
 const pack = (value) => JSON.parse(JSON.stringify(value, (key, v) => (typeof v === "number" ? r4(v) : v instanceof Float64Array || v instanceof Float32Array ? Array.from(v, r4) : v)));
 const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function octOf(n) {
-  const l = Math.abs(n[0]) + Math.abs(n[1]) + Math.abs(n[2]) || 1;
-  let x = n[0] / l;
-  let y = n[1] / l;
-  if (n[2] < 0) {
+  const snap = (v) => Math.abs(v) < 1e-4 ? 0 : v;
+  const nx = snap(n[0]);
+  const ny = snap(n[1]);
+  const nz = snap(n[2]);
+  const l = Math.abs(nx) + Math.abs(ny) + Math.abs(nz) || 1;
+  let x = nx / l;
+  let y = ny / l;
+  if (nz < 0) {
     const ox = (1 - Math.abs(y)) * (x >= 0 ? 1 : -1);
     const oy = (1 - Math.abs(x)) * (y >= 0 ? 1 : -1);
     x = ox;
     y = oy;
   }
-  return [Math.round((x * 0.5 + 0.5) * 65535), Math.round((y * 0.5 + 0.5) * 65535)];
+  return [roundScaled((x * 0.5 + 0.5) * 65535, 8), roundScaled((y * 0.5 + 0.5) * 65535, 8)];
 }
 
 function packPairs(byLayer, stride, grouped) {

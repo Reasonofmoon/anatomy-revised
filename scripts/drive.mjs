@@ -1,12 +1,28 @@
-import { chromePort } from "./chrome-port.mjs";
+import { chromePort, killChrome, removeProfile } from "./chrome-port.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { reportCallouts, CALLOUT_HITS } from "./callout-hits.mjs";
 import { LEGIBLE_TEXT, reportLegible } from "./legible-text.mjs";
 import { LINE_ENDS } from "./line-ends.mjs";
+
+if (process.argv.includes("--clean-profiles")) {
+  const directory = process.env.ANATOMY_PROFILE_DIR || tmpdir();
+  let removed = 0;
+  for (const name of readdirSync(directory)) {
+    if (!name.startsWith("iso-drive-")) continue;
+    const path = join(directory, name);
+    try {
+      if (!statSync(path).isDirectory()) continue;
+      rmSync(path, { recursive: true, force: true });
+      removed++;
+    } catch { /* a live Chrome may still hold one */ }
+  }
+  console.log(`removed ${removed} iso-drive profile${removed === 1 ? "" : "s"}`);
+  process.exit(0);
+}
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
   const child = spawn(process.execPath, ["--experimental-websocket", ...process.argv.slice(1)], { stdio: "inherit" });
@@ -21,7 +37,8 @@ function usage() {
   node drive.mjs <file.html | url> '<actions as JSON>' [--width 1440] [--height 1100] [--scale 1] [--reduced] [--theme dark|light] [--no-webgl] [--preload file.js]
   node drive.mjs <file.html | url> --actions steps.json
 
-  --reduced     emulate prefers-reduced-motion: reduce
+  --reduced     emulate prefers-reduced-motion: reduce (the default is no-preference, even when the OS reduces motion)
+  --clean-profiles   delete leftover /tmp/iso-drive-* Chrome profiles and exit
   --theme t     emulate prefers-color-scheme: dark or light (only pages that read the media query follow it)
   --no-webgl    make canvas.getContext("webgl"/"webgl2") return null, to check the SVG fallback
   --preload js  run a script before the page's own scripts (counters, stubs, hooks)
@@ -100,7 +117,7 @@ async function main() {
     usage();
     process.exit(argv.length ? 0 : 1);
   }
-  const options = { width: 1440, height: 1100, scale: 1, reduced: false, theme: null, actions: null, noWebgl: false, preload: null };
+  const options = { width: 1440, height: 1100, scale: 1, reduced: false, theme: null, actions: null, noWebgl: false, preload: null, profile: null };
   const rest = [];
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
@@ -112,6 +129,7 @@ async function main() {
     else if (arg === "--no-webgl") options.noWebgl = true;
     else if (arg === "--preload") options.preload = readFileSync(argv[++index], "utf8");
     else if (arg === "--actions") options.actions = JSON.parse(readFileSync(argv[++index], "utf8"));
+    else if (arg === "--profile") options.profile = argv[++index];
     else rest.push(arg);
   }
   const [target, script] = rest;
@@ -135,14 +153,23 @@ async function main() {
     console.error("No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.");
     process.exit(1);
   }
-  const profile = mkdtempSync(join(tmpdir(), "iso-drive-"));
+  const ownsProfile = !options.profile;
+  const profile = options.profile || mkdtempSync(join(tmpdir(), "iso-drive-"));
+  if (options.profile) mkdirSync(profile, { recursive: true });
   const chrome = spawn(binary, ["--headless=new", ...(process.platform === "linux" ? ["--no-sandbox"] : []), ...(process.platform === "win32" ? ["--do-not-de-elevate"] : []), "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--allow-file-access-from-files", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    try { killChrome(chrome, profile); } catch { /* already gone */ }
+    if (ownsProfile) removeProfile(profile);
+  };
+  process.on("exit", cleanup);
+  process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+  process.on("SIGINT", () => { cleanup(); process.exit(130); });
   const port = await chromePort(chrome, profile);
   const finish = (code) => {
-    chrome.kill("SIGKILL");
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {}
+    cleanup();
     process.exit(code);
   };
   try {
@@ -189,13 +216,14 @@ async function main() {
     const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
     await send("Runtime.enable");
     await send("Page.enable");
-    const features = [];
-    if (options.reduced) features.push({ name: "prefers-reduced-motion", value: "reduce" });
+    const features = [{ name: "prefers-reduced-motion", value: options.reduced ? "reduce" : "no-preference" }];
     if (options.theme) features.push({ name: "prefers-color-scheme", value: options.theme });
-    if (features.length) await send("Emulation.setEmulatedMedia", { features });
+    await send("Emulation.setEmulatedMedia", { features });
+    const motion = options.reduced ? "reduce" : "no-preference";
+    const MOTION = `(()=>{const native=window.matchMedia.bind(window);const want=${JSON.stringify(motion)};window.matchMedia=(query)=>{const result=native(query);if(!String(query).includes("prefers-reduced-motion"))return result;const matches=want==="reduce";return {matches,media:String(query),onchange:null,addListener(){},removeListener(){},addEventListener(){},removeEventListener(){},dispatchEvent(){return false}}};})();`;
     const SLOW = `(()=>{const raf=window.requestAnimationFrame.bind(window);let real=null,virtual=0;window.__driveSpeed=1;window.requestAnimationFrame=(callback)=>raf((now)=>{if(real===null){real=now;virtual=now}virtual+=(now-real)*window.__driveSpeed;real=now;callback(virtual)});const clock=performance.now.bind(performance);let base=null,shown=0;performance.now=()=>{const now=clock();if(base===null){base=now;shown=now}shown+=(now-base)*window.__driveSpeed;base=now;return shown}})();`;
     const NO_GL = `(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...rest){if(/webgl/.test(String(kind)))return null;return get.call(this,kind,...rest)}})();`;
-    const early = [SLOW, options.noWebgl ? NO_GL : "", options.preload ?? ""].filter(Boolean).join("\n");
+    const early = [MOTION, SLOW, options.noWebgl ? NO_GL : "", options.preload ?? ""].filter(Boolean).join("\n");
     await send("Page.addScriptToEvaluateOnNewDocument", { source: early });
     await send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: options.scale, mobile: options.width < 600 });
     const load = new Promise((done) => {
@@ -263,7 +291,10 @@ async function main() {
         const code = args[2] ?? (named[key] ?? (/^[0-9]$/.test(key) ? `Digit${key}` : key.length === 1 ? `Key${key.toUpperCase()}` : key));
         await send("Input.dispatchKeyEvent", { type: "keyDown", key, code, text: key === "Enter" ? "\r" : key.length === 1 ? key : undefined, windowsVirtualKeyCode: key === " " ? 32 : key === "Enter" ? 13 : 0 });
         await send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: key === "Enter" ? 13 : undefined });
-      } else if (kind === "eval") console.log("eval:", JSON.stringify(await evaluate(args[0])));
+      } else if (kind === "eval") {
+        const value = await evaluate(args[0]);
+        if (value !== undefined) console.log("eval:", JSON.stringify(value));
+      }
       else if (kind === "slow") await evaluate(`window.__driveSpeed=${Number(args[0])}`);
       else if (kind === "until") {
         const limit = Date.now() + (args[1] ?? 10000);
@@ -319,9 +350,12 @@ async function main() {
         const where = selector ? ` in ${selector}` : "";
         const hiddenNote = result.hidden ? ` ${result.hidden} .iso-line marks were hidden or below the opacity floor.` : "";
         if (!result.lines) {
-          const empty = `lines: EMPTY — 0 candidate lines${where}.${hiddenNote} The check saw nothing, so this is not a pass. Point --select at a layer that has texture lines, --eval a hook that shows the state you mean (folded or unfolded), or pass --allow-empty.`;
-          console.log(empty);
-          if (!extra?.allowEmpty) failed++;
+          if (extra?.unfolded) console.log(`lines: unfolded — the drawing is dimmed, so this check measures teaching text and callouts, not texture lines${where}.`);
+          else {
+            const empty = `lines: EMPTY — 0 candidate lines${where}.${hiddenNote} The check saw nothing, so this is not a pass. Point --select at a layer that has texture lines, --eval a hook that shows the state you mean (folded or unfolded), or pass --allow-empty.`;
+            console.log(empty);
+            if (!extra?.allowEmpty) failed++;
+          }
         }
         console.log(`line ends: ${result.problems.length} of ${result.ends} ends on ${result.lines} lines float`);
         for (const problem of result.problems) console.log(`  ${problem.what}  ${problem.end}${problem.mark ? " (a mark: neither end rooted)" : ""}  ${problem.gap == null ? "nothing nearby" : `${problem.gap.toFixed(2)} px from anything`}   at card ${problem.at.join(",")}   length ${problem.length}   d ${problem.d}…${problem.opacity < 1 ? `   opacity ${problem.opacity}` : ""}`);

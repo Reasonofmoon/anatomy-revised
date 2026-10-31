@@ -53,6 +53,7 @@ function legibleText() {
     warnings: rows.filter((row) => !row.hard && !row.ok),
     folded: Boolean(layer && layer.getAttribute("data-fold-state") === "folded"),
     fold: Boolean(layer),
+    width: innerWidth,
   };
 }
 
@@ -77,8 +78,13 @@ export function reportLegible(result) {
   } else if (result.fold) {
     lines.push("legible: warning · a fold layer is present but no teaching text is visible.");
   }
-  for (const row of result.warnings ?? []) {
-    lines.push(`legible: warning · engraved face text "${row.text}" is ${row.px}px (under ${row.required}px). Put words a reader must read on the fold layer.`);
+  const warnings = result.warnings ?? [];
+  if (warnings.length > 1) {
+    const sizes = warnings.map((row) => row.px).sort((a, b) => a - b);
+    const width = result.width ? ` on a ${result.width}px viewport` : "";
+    lines.push(`legible: warning · ${warnings.length} engraved labels are ${sizes[0]}–${sizes[sizes.length - 1]}px${width} (under ${warnings[0].required}px). They are engravings; put words a reader must read on the fold layer.`);
+  } else {
+    for (const row of warnings) lines.push(`legible: warning · engraved face text "${row.text}" is ${row.px}px (under ${row.required}px). Put words a reader must read on the fold layer.`);
   }
   return { lines, failed };
 }

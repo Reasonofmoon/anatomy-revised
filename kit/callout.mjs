@@ -77,21 +77,38 @@ export function calloutRuntime() {
   return `const overlapArea = ${overlapArea.toString()};
 const coverageRatio = ${coverageRatio.toString()};
 const placeCallout = ${placeCallout.toString()};
+const DIM = 0.35;
+function shown(el) {
+  let alpha = 1;
+  for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    alpha *= Number(style.opacity);
+    if (!(alpha >= DIM)) return false;
+  }
+  const rect = el.getBoundingClientRect();
+  return rect.width >= 1 && rect.height >= 1;
+}
+function measure(el) {
+  const rect = el.getBoundingClientRect();
+  let top = rect.top, left = rect.left, right = rect.right, bottom = rect.bottom;
+  for (const child of el.querySelectorAll ? el.querySelectorAll(".fn-flap, .fn-glue") : []) {
+    const box = child.getBoundingClientRect();
+    if (box.width < 0.5 || box.height < 0.5) continue;
+    top = Math.min(top, box.top);
+    left = Math.min(left, box.left);
+    right = Math.max(right, box.right);
+    bottom = Math.max(bottom, box.bottom);
+  }
+  return { top, left, right, bottom, width: right - left, height: bottom - top };
+}
 function nudgeCallouts() {
   const stage = document.querySelector("[data-fold-stage]") || document.querySelector(".iso-plate") || document.body;
   const origin = stage.getBoundingClientRect();
   if (!origin.width || !origin.height) return 0;
   const local = (rect) => ({ x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height });
-  const shown = (el) => {
-    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
-      const style = getComputedStyle(node);
-      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
-    }
-    const rect = el.getBoundingClientRect();
-    return rect.width >= 1 && rect.height >= 1;
-  };
   const folded = document.querySelector("[data-fold-layer]")?.getAttribute("data-fold-state") === "folded";
-  const obstacles = [...document.querySelectorAll("[data-important]")].filter(shown).map((el) => local(el.getBoundingClientRect()));
+  const obstacles = [...document.querySelectorAll("[data-important]")].filter(shown).map((el) => local(measure(el)));
   const bounds = { x: 0, y: 0, w: origin.width, h: origin.height };
   let moved = 0;
   for (const el of document.querySelectorAll("[data-callout]")) {
@@ -102,7 +119,7 @@ function nudgeCallouts() {
     const anchorEl = preferred[0] || matches[0];
     if (!anchorEl) continue;
     const size = { w: el.offsetWidth || 160, h: el.offsetHeight || 36 };
-    const place = placeCallout(local(anchorEl.getBoundingClientRect()), size, obstacles, bounds, { prefer: el.getAttribute("data-prefer") || "above" });
+    const place = placeCallout(local(measure(anchorEl)), size, obstacles, bounds, { prefer: el.getAttribute("data-prefer") || "above" });
     el.style.left = place.x + "px";
     el.style.top = place.y + "px";
     el.setAttribute("data-placed", place.place);
@@ -110,7 +127,16 @@ function nudgeCallouts() {
   }
   return moved;
 }
-window.__callout = { nudge: nudgeCallouts, place: placeCallout };
+function setCallout(options) {
+  const spec = options || {};
+  const el = spec.name ? document.querySelector('[data-callout="' + String(spec.name).replace(/"/g, "") + '"]') : document.querySelector("[data-callout]");
+  if (!el) return 0;
+  if (spec.text != null) el.textContent = String(spec.text);
+  if (spec.anchor != null) el.setAttribute("data-anchor", spec.anchor);
+  if (spec.prefer != null) el.setAttribute("data-prefer", spec.prefer);
+  return nudgeCallouts();
+}
+window.__callout = { nudge: nudgeCallouts, place: placeCallout, set: setCallout };
 document.addEventListener("foldchange", () => requestAnimationFrame(nudgeCallouts));
 window.addEventListener("resize", nudgeCallouts);
 nudgeCallouts();
