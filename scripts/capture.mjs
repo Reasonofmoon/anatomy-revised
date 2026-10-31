@@ -187,9 +187,12 @@ async function main() {
     const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
     await send("Runtime.enable");
     await send("Page.enable");
-    const features = [{ name: "prefers-reduced-motion", value: options.reduced ? "reduce" : "no-preference" }];
+    const features = [];
+    if (options.reduced) features.push({ name: "prefers-reduced-motion", value: "reduce" });
     if (options.theme) features.push({ name: "prefers-color-scheme", value: options.theme });
     if (features.length) await send("Emulation.setEmulatedMedia", { features });
+    const motion = options.reduced ? "reduce" : "no-preference";
+    await send("Page.addScriptToEvaluateOnNewDocument", { source: `(()=>{const native=window.matchMedia.bind(window);const want=${JSON.stringify(motion)};window.matchMedia=(query)=>{const result=native(query);if(!String(query).includes("prefers-reduced-motion"))return result;const matches=want==="reduce";return {matches,media:String(query),onchange:null,addListener(){},removeListener(){},addEventListener(){},removeEventListener(){},dispatchEvent(){return false}}};})();` });
     await send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: options.scale, mobile: options.width < 600 });
     const load = new Promise((done) => {
       loaded = done;

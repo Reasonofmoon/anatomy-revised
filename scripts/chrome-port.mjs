@@ -13,13 +13,24 @@ export function removeProfile(profile) {
 }
 
 export function killChrome(chrome, profile) {
-  if (chrome?.pid && process.platform === "win32") {
-    spawnSync("taskkill", ["/pid", String(chrome.pid), "/t", "/f"], { stdio: "ignore" });
-  } else if (chrome) {
-    try { if (chrome.pid) process.kill(-chrome.pid, "SIGKILL"); } catch { /* not a process-group leader */ }
-    try { chrome.kill("SIGKILL"); } catch { /* already gone */ }
+  const pids = new Set();
+  if (chrome?.pid) pids.add(chrome.pid);
+  if (profile && process.platform === "win32") {
+    if (chrome?.pid) spawnSync("taskkill", ["/pid", String(chrome.pid), "/t", "/f"], { stdio: "ignore" });
+    return;
   }
-  if (profile && process.platform !== "win32") spawnSync("pkill", ["-KILL", "-f", `user-data-dir=${profile}`], { stdio: "ignore" });
+  if (profile && process.platform !== "win32") {
+    const listed = spawnSync("ps", ["-eo", "pid,command"], { encoding: "utf8" });
+    const needle = `--user-data-dir=${profile}`;
+    for (const line of String(listed.stdout || "").split("\n")) {
+      if (!line.includes(needle)) continue;
+      const pid = Number(line.trim().split(/\s+/, 1)[0]);
+      if (pid > 0) pids.add(pid);
+    }
+  }
+  for (const pid of pids) {
+    try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+  }
 }
 
 export async function chromePort(chrome, profile) {

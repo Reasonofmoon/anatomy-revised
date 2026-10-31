@@ -219,9 +219,11 @@ async function main() {
     const features = [{ name: "prefers-reduced-motion", value: options.reduced ? "reduce" : "no-preference" }];
     if (options.theme) features.push({ name: "prefers-color-scheme", value: options.theme });
     await send("Emulation.setEmulatedMedia", { features });
+    const motion = options.reduced ? "reduce" : "no-preference";
+    const MOTION = `(()=>{const native=window.matchMedia.bind(window);const want=${JSON.stringify(motion)};window.matchMedia=(query)=>{const result=native(query);if(!String(query).includes("prefers-reduced-motion"))return result;const matches=want==="reduce";return {matches,media:String(query),onchange:null,addListener(){},removeListener(){},addEventListener(){},removeEventListener(){},dispatchEvent(){return false}}};})();`;
     const SLOW = `(()=>{const raf=window.requestAnimationFrame.bind(window);let real=null,virtual=0;window.__driveSpeed=1;window.requestAnimationFrame=(callback)=>raf((now)=>{if(real===null){real=now;virtual=now}virtual+=(now-real)*window.__driveSpeed;real=now;callback(virtual)});const clock=performance.now.bind(performance);let base=null,shown=0;performance.now=()=>{const now=clock();if(base===null){base=now;shown=now}shown+=(now-base)*window.__driveSpeed;base=now;return shown}})();`;
     const NO_GL = `(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...rest){if(/webgl/.test(String(kind)))return null;return get.call(this,kind,...rest)}})();`;
-    const early = [SLOW, options.noWebgl ? NO_GL : "", options.preload ?? ""].filter(Boolean).join("\n");
+    const early = [MOTION, SLOW, options.noWebgl ? NO_GL : "", options.preload ?? ""].filter(Boolean).join("\n");
     await send("Page.addScriptToEvaluateOnNewDocument", { source: early });
     await send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: options.scale, mobile: options.width < 600 });
     const load = new Promise((done) => {
