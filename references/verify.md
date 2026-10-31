@@ -49,7 +49,7 @@ Options are `--width` (1440), `--height` (1100), `--scale` (1), `--reduced`, `--
 | `["sheet", out, every, count, sel?, scale?, [x,y,w,h]?, columns?]` | Takes `count` frames `every` ms apart and tiles them into one numbered PNG. |
 | `["turn", value, group?]` | 3D figures: sets `window.__isoTurn` (a number sets the first turn group, `group` names another, an object sets several) and waits two frames. |
 | `["orbit", out, from, to, step, sel?, scale?, [x,y,w,h]?, columns?]` | 3D figures: a contact sheet across angles of the first turn group, each frame labelled. `["orbit", "swap.png", 129.7, 130.2, 0.1, null, 6, [x, y, w, h]]` is a 6× close-up of one order change. |
-| `["lines", out?, sel?, { tolerance }?]` | The line-end check below, in whatever pose the actions before it left the figure (apart, mid-stroke). `out` writes the card with every floating end ringed. A failure makes the run exit 1. |
+| `["lines", out?, sel?, { tolerance, allowEmpty }?]` | The line-end check below, in whatever pose the actions before it left the figure (apart, mid-stroke, folded, unfolded). `out` writes the card with every floating end ringed. Zero candidate lines fail the run unless `allowEmpty` is set. The same action measures teaching text and callout overlap. A failure makes the run exit 1. |
 
 Traps:
 - **Shots are correct after `scroll`**, so you can scroll to a figure lower on a page. A viewport tall enough for the whole card (`--height 1300`) is still the simplest: the figure is visible at scroll 0, and its `IntersectionObserver` starts it.
@@ -67,7 +67,9 @@ The audit sees recorded shapes, never line markup, so it can't see a seam, rule,
 node scripts/lines.mjs page.html --out shots/lines.png
 node scripts/lines.mjs page-light.html --out shots/lines-light.png --reduced
 node scripts/drive.mjs page.html '[["key"," "],["wait",2000],["lines","shots/lines-apart.png"]]'
+node scripts/lines.mjs page.html --eval "window.__fold.set('folded', true)"
 ```
+`lines: EMPTY — 0 candidate lines` is a failure, not a pass. It is what a dimmed fold layer or a selector with no `.iso-line` used to report as `0 of 0`. Hidden marks are counted in the same line (`N .iso-line marks were hidden`). `--eval` and `--eval-file` run before the check so you can select folded or unfolded. `--allow-empty` turns the empty result into a warning. The same run fails when a visible `data-legible` word (every fold-layer word) is under 28px at a desktop width, or under 16px below 1100px, and when a `data-callout` covers 8% or more of a `data-important` part. Engraved `.iso-face-text` under 12px is a warning. `capture.mjs` prints the same text check and exits 1 on a teaching-text failure.
 ```
 line ends: 3 of 1148 ends on 295 lines float
   iso-line faint in it k -0.080  end  7.25 px from anything   at card 507.4,407.2   length 75.7   d M392.1 381.7L507.4 407.2…

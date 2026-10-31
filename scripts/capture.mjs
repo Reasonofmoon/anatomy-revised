@@ -1,4 +1,5 @@
 import { chromePort } from "./chrome-port.mjs";
+import { LEGIBLE_TEXT, reportLegible } from "./legible-text.mjs";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -256,12 +257,14 @@ async function main() {
     }
     const sideways = await evaluate(`document.documentElement.scrollWidth > innerWidth + 1`);
     const readout = await readoutOf();
+    const legible = reportLegible(await evaluate(`(${LEGIBLE_TEXT})()`));
     console.log(`saved ${out}`);
     console.log(`clip ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.w)}x${Math.round(box.h)} · readout "${readout}" · scrolls sideways: ${sideways ? "YES" : "no"}`);
     if (readouts.length) console.log(`readout over time: ${readouts.join(" · ")}`);
+    for (const line of legible.lines) console.log(line);
     console.log(problems.length ? problems.join("\n") : "console: clean");
     socket.close();
-    finish(0);
+    finish(legible.failed ? 1 : 0);
   } catch (error) {
     console.error(error);
     finish(1);

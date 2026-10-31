@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { reportCallouts, CALLOUT_HITS } from "./callout-hits.mjs";
+import { LEGIBLE_TEXT, reportLegible } from "./legible-text.mjs";
 import { LINE_ENDS } from "./line-ends.mjs";
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
@@ -45,8 +47,10 @@ Fractions are 0..1 across the element.
   ["lines", out.png?, sel?, options?]     check every texture line's two ends: each must land on a stroke, a dot or an outline
                                           (within options.tolerance, 1 viewBox px), or hide under a fill painted later; a short
                                           straight mark (a tick) needs one rooted end; lines with data-free and fade ramps are
-                                          exempt. Prints each floating end in card px; out.png marks them with rings. Any failure
-                                          makes the run exit 1
+                                          exempt. Prints each floating end in card px; out.png marks them with rings. Zero
+                                          candidate lines fail the run (options.allowEmpty warns instead). The same action
+                                          measures teaching text and fails when a data-callout covers a data-important part.
+                                          Any failure makes the run exit 1
   ["turn", value, group?]                 set a 3D figure's turn through window.__isoTurn (a number sets the first turn group,
                                           group names another), then wait two animation frames
   ["orbit", out.png, from, to, step, sel?, scale?, [x,y,w,h]?, columns?]
@@ -312,6 +316,13 @@ async function main() {
           failed++;
           continue;
         }
+        const where = selector ? ` in ${selector}` : "";
+        const hiddenNote = result.hidden ? ` ${result.hidden} .iso-line marks were hidden or below the opacity floor.` : "";
+        if (!result.lines) {
+          const empty = `lines: EMPTY — 0 candidate lines${where}.${hiddenNote} The check saw nothing, so this is not a pass. Point --select at a layer that has texture lines, --eval a hook that shows the state you mean (folded or unfolded), or pass --allow-empty.`;
+          console.log(empty);
+          if (!extra?.allowEmpty) failed++;
+        }
         console.log(`line ends: ${result.problems.length} of ${result.ends} ends on ${result.lines} lines float`);
         for (const problem of result.problems) console.log(`  ${problem.what}  ${problem.end}${problem.mark ? " (a mark: neither end rooted)" : ""}  ${problem.gap == null ? "nothing nearby" : `${problem.gap.toFixed(2)} px from anything`}   at card ${problem.at.join(",")}   length ${problem.length}   d ${problem.d}…${problem.opacity < 1 ? `   opacity ${problem.opacity}` : ""}`);
         if (out) {
@@ -320,6 +331,12 @@ async function main() {
           console.log(`shot ${out}`);
         }
         failed += result.problems.length;
+        const legible = reportLegible(await evaluate(`(${LEGIBLE_TEXT})()`));
+        for (const line of legible.lines) console.log(line);
+        if (legible.failed) failed++;
+        const callouts = reportCallouts(await evaluate(`(${CALLOUT_HITS})()`));
+        for (const line of callouts.lines) console.log(line);
+        if (callouts.failed) failed += 1;
       }
     }
     console.log(problems.length ? problems.join("\n") : "console: clean");

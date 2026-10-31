@@ -60,6 +60,8 @@ node examples/turning-dial/build.mjs
 node examples/turning-dial/build.mjs --light
 node examples/turning-dial/build.mjs --light --verify
 node examples/turning-dial/stress.mjs --light
+node examples/sentence-blocks/build.mjs
+node examples/sentence-blocks/build.mjs --light
 ```
 
 The Raptor builds take a few minutes each; the rest take seconds. `examples/test-rig/` and `examples/spot-plate/` are React components with no build script.

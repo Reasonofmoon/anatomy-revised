@@ -17,7 +17,8 @@ Everything is in `kit/iso-kit.ts`, with the same API in `kit/iso-kit.mjs`. World
 12. The audit (`kit/audit.mjs`)
 13. The WebGL layer (`kit/gl.mjs`)
 14. Tools
-15. Turning groups (`kit/turn.mjs`, `turn-build.mjs`, `turn-audit.mjs`)
+15. Fold layer and callouts (`kit/fold.mjs`, `kit/fold-sheet.mjs`, `kit/callout.mjs`)
+16. Turning groups (`kit/turn.mjs`, `turn-build.mjs`, `turn-audit.mjs`)
 
 ## 1. Types
 ```ts
@@ -379,7 +380,19 @@ A value for `fixed`, `set` or `draw` can be a number (float), an array of length
 | `scripts/turn-check.mjs` | 3D figures. `build.mjs --fidelity` (Node: prisms, rounds, lathes and tubes against the kit builders at P′(θ)); `page.html --order` (needs a `--verify` build), `--pops`, `--lines`, `--perf`, `--states file.json`, `--part name`, `--out dir`. Every check runs its planted control first. `references/3d.md`, section 14. |
 | `scripts/turn-bench.mjs` | 3D figures: `emit` and `order` CPU time in Node over 360 angles, per part kind (median of 7). |
 
-## 15. Turning groups (`kit/turn.mjs`, `turn-build.mjs`, `turn-audit.mjs`)
+## 15. Fold layer, callouts (`kit/fold.mjs`, `kit/fold-sheet.mjs`, `kit/callout.mjs`)
+
+`references/fold.md` is the guide. Short form:
+
+| Export | What it does |
+|---|---|
+| `foldLayerHtml({ blocks, formula, labels, state })`, `foldCss()`, `foldLegendHtml(blocks)`, `foldScript(config)` | The on-screen nets, their CSS, the reduced-motion list, and the runtime (`window.__fold.set("folded" \| "unfolded", immediate)`). |
+| `foldSheetDocument({ title, pages, labels })` | An A4 cut-and-fold sheet. Words are 20pt or larger. |
+| `placeCallout(anchor, size, obstacles, bounds, { gap, prefer })`, `calloutHtml(...)`, `calloutRuntime()` | Puts a bubble on the free spot. `calloutRuntime` nudges every `[data-callout]` away from `[data-important]`. |
+
+A block is `{ id, text, label, slot, role, note, important, key, fill, top, edge, ink, sub, shades }`. `config.slots[slot]` is the viewBox point `[x, y]` the net drops toward.
+
+## 16. Turning groups (`kit/turn.mjs`, `turn-build.mjs`, `turn-audit.mjs`)
 The optional 3D mode. `references/3d.md` is the guide; this is the reference.
 ```js
 import { turning, separate, gjk } from "../../kit/turn-build.mjs";

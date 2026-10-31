@@ -1,0 +1,84 @@
+// On-screen size of teaching text. Face text engraved on an isometric face is
+// allowed to be small; words a reader must read are marked data-legible
+// (the fold layer's .fn-word carries that mark).
+
+export const LEGIBLE = {
+  desktopPx: 28,
+  narrowPx: 16,
+  desktopAt: 1100,
+  faceWarnPx: 12,
+  printPt: 20,
+};
+
+export function legibleMinimum(width) {
+  return width >= LEGIBLE.desktopAt ? LEGIBLE.desktopPx : LEGIBLE.narrowPx;
+}
+
+function legibleText() {
+  const desktopAt = 1100;
+  const desktopPx = 28;
+  const narrowPx = 16;
+  const faceWarnPx = 12;
+  const min = innerWidth >= desktopAt ? desktopPx : narrowPx;
+  const shown = (el) => {
+    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+    }
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0.5 && rect.height > 0.5;
+  };
+  const seen = new Set();
+  const rows = [];
+  for (const el of document.querySelectorAll("[data-legible], .fn-word, .iso-face-text")) {
+    if (seen.has(el) || !shown(el)) continue;
+    seen.add(el);
+    const hard = el.matches("[data-legible], .fn-word");
+    const px = el.getBoundingClientRect().height;
+    const required = hard ? min : faceWarnPx;
+    rows.push({
+      text: (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 48),
+      px: Math.round(px * 10) / 10,
+      required,
+      hard,
+      ok: px + 0.49 >= required,
+    });
+  }
+  const layer = document.querySelector("[data-fold-layer]");
+  return {
+    min,
+    checked: rows.length,
+    teaching: rows.filter((row) => row.hard).length,
+    failures: rows.filter((row) => row.hard && !row.ok),
+    warnings: rows.filter((row) => !row.hard && !row.ok),
+    folded: Boolean(layer && layer.getAttribute("data-fold-state") === "folded"),
+    fold: Boolean(layer),
+  };
+}
+
+export const LEGIBLE_TEXT = legibleText.toString();
+
+export function reportLegible(result) {
+  if (!result) return { lines: ["legible: the check did not run"], failed: false };
+  const lines = [];
+  let failed = false;
+  const foldedNote = "legible: warning · fold layer is folded, so no teaching text is on screen. Unfold it (lines.mjs --eval \"window.__fold.set('unfolded', true)\") to measure the nets.";
+  if (result.failures?.length) {
+    failed = true;
+    lines.push(`legible: FAIL · ${result.failures.length} teaching text${result.failures.length === 1 ? "" : "s"} under ${result.min}px`);
+    for (const row of result.failures) lines.push(`  "${row.text}" is ${row.px}px tall, under ${row.required}px`);
+  } else if (result.teaching) {
+    lines.push(`legible: ${result.checked} visible text${result.checked === 1 ? "" : "s"}, teaching text at least ${result.min}px`);
+  } else if (result.checked) {
+    lines.push(`legible: ${result.checked} visible text${result.checked === 1 ? "" : "s"}`);
+    if (result.folded) lines.push(foldedNote);
+  } else if (result.folded) {
+    lines.push(foldedNote);
+  } else if (result.fold) {
+    lines.push("legible: warning · a fold layer is present but no teaching text is visible.");
+  }
+  for (const row of result.warnings ?? []) {
+    lines.push(`legible: warning · engraved face text "${row.text}" is ${row.px}px (under ${row.required}px). Put words a reader must read on the fold layer.`);
+  }
+  return { lines, failed };
+}

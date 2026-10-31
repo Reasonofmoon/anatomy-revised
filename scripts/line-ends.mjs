@@ -165,11 +165,16 @@ function lineEnds({ select = null, tolerance = 1, root: rootSlack = 2, mark = 7,
     grid.get(id).push(entry);
   };
   const lines = [];
+  let unseen = 0;
   let scale = 1;
   for (const el of shapes) {
     const cs = getComputedStyle(el);
     const alpha = opacityOf(el);
-    if (alpha < 0.1) continue;
+    const candidate = el.classList.contains("iso-line") && !skipClass.some((name) => el.classList.contains(name));
+    if (alpha < 0.1) {
+      if (candidate) unseen++;
+      continue;
+    }
     const ctm = el.getScreenCTM();
     if (!ctm) continue;
     const map = ([px, py]) => [ctm.a * px + ctm.c * py + ctm.e, ctm.b * px + ctm.d * py + ctm.f];
@@ -207,8 +212,10 @@ function lineEnds({ select = null, tolerance = 1, root: rootSlack = 2, mark = 7,
         for (let gx = Math.floor(Math.min(a[0], b[0]) / cell); gx <= Math.floor(Math.max(a[0], b[0]) / cell); gx++) for (let gy = Math.floor(Math.min(a[1], b[1]) / cell); gy <= Math.floor(Math.max(a[1], b[1]) / cell); gy++) add(gx, gy, entry);
       }
     });
-    const checked = el.classList.contains("iso-line") && !skipClass.some((name) => el.classList.contains(name)) && alpha >= least;
-    if (checked) lines.push({ el, subpaths, alpha, free: el.getAttribute("data-free") });
+    if (candidate) {
+      if (alpha >= least) lines.push({ el, subpaths, alpha, free: el.getAttribute("data-free") });
+      else unseen++;
+    }
   }
   const near = (p, reach) => {
     const out = new Set();
@@ -319,7 +326,7 @@ function lineEnds({ select = null, tolerance = 1, root: rootSlack = 2, mark = 7,
     }
     document.body.append(overlay);
   }
-  return { ends, lines: lines.length, problems: problems.map(({ client, ...rest }) => rest) };
+  return { ends, lines: lines.length, hidden: unseen, problems: problems.map(({ client, ...rest }) => rest) };
 }
 
 export const LINE_ENDS = lineEnds.toString();

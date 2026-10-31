@@ -10,7 +10,9 @@ node scripts/print.mjs examples/raptor-engine/sheet.mjs --format all --png
 node scripts/print.mjs examples/arcade-cabinet/sheet.mjs --format detailed --letter
 ```
 
-It writes `<out>-<format>-a4.pdf` and `.html` next to the spec (`-letter` with `--letter`), plus a preview `.png` with `--png`. It exits 1 when a format runs past its page count.
+It writes `<out>-<format>-a4.pdf` and `.html` next to the spec (`-letter` with `--letter`), plus a preview `.png` with `--png`. It exits 1 when a format runs past its page count. The three formats are poster, drawing and detailed.
+
+Chrome's `--print-to-pdf` flag can hang on Linux when the sheet, or a page it captured, never goes idle. `print.mjs` kills that process after `ANATOMY_PRINT_TIMEOUT_MS` (default 20 seconds) and prints the same HTML with `Page.printToPDF`. The log says `via --print-to-pdf` or `via Page.printToPDF`. If both fail, the script exits with both reasons instead of waiting. Pose capture through `drive.mjs` is killed after 120 seconds with the same kind of error.
 
 ## The three formats
 
