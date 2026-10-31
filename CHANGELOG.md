@@ -6,6 +6,8 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Added
 
+- A fold layer for words that have to be read. `kit/fold.mjs` draws each block as a flat paper net (32px type, hinges, a glue tab, a key tab) that folds into an isometric slot; `kit/fold-sheet.mjs` lays the same nets out as an A4 cut-and-fold sheet at 20pt or larger. `kit/callout.mjs` places a label bubble off any part marked `data-important`. `examples/sentence-blocks/` is the worked figure (Tom reads books.) and the skeleton for splitting a figure into modules under about 300 lines. `references/fold.md`, `references/modules.md`.
+- Teaching-text checks. `capture.mjs` and `lines.mjs` fail when visible `data-legible` text, including every fold-layer word, renders under 28px on a desktop-width viewport (16px below 1100px). Engraved `.iso-face-text` under 12px is a warning. The same line check fails when a `data-callout` covers 8% or more of a `data-important` part.
 - Printable sheets. `scripts/print.mjs` freezes poses of a built figure as vector stills (WebGL as a 2× PNG) and prints one A4 or US Letter PDF in three formats: `poster` (one page: big name, numbers, pinned figure and a line per part), `drawing` (one page: parts list, specification, inset and a strip of lit steps) and `detailed` (two pages: pinned figure with round close-ups, then large lit steps with text and the why). Parts are CSS selectors over the live SVG, so any figure can be printed; crowded pins spread apart with hairline leaders, and the script fails when a format runs past its pages. `examples/raptor-engine/sheet.mjs` and `examples/arcade-cabinet/sheet.mjs` are the references, `references/print.md` the guide.
 - Antigravity support, alongside Claude Code, OpenCode and Codex. Documented user and project installation paths in the README and CONTRIBUTING, updated SKILL.md compatibility, and added Antigravity to the bug report form.
 - MiniMax Code support. The README and CONTRIBUTING document its user (`~/.minimax/skills`) and project (`.minimax/skills`) folders and `npx skills add ... -a minimax-code`, SKILL.md lists it, and the bug report form offers it.
@@ -16,6 +18,8 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Fixed
 
+- `scripts/lines.mjs` no longer treats “0 of 0” as a pass. Zero candidate lines print `lines: EMPTY` and exit 1, including when the marks were hidden by a dimmed or folded layer. `--eval` and `--eval-file` run a hook first so a check can target folded or unfolded; `--allow-empty` keeps the warning without failing.
+- `scripts/print.mjs` no longer waits forever on Chrome `--print-to-pdf`. The attempt is killed after `ANATOMY_PRINT_TIMEOUT_MS` (default 20s) and the same HTML is printed with `Page.printToPDF`. If both fail, the script exits with both reasons. Poster, drawing and detailed are unchanged. Pose capture through `drive.mjs` is killed after 120s instead of hanging with it.
 - Line-end audits follow cubic and quadratic strokes with a bounded screen-space approximation, so lines attached between curve samples are not reported as loose.
 
 - `drive.mjs` waits for the page to load (up to 10 s) before it runs the first action, and gives up with an error when Chrome leaves a request unanswered for 60 s instead of hanging, as `capture.mjs` now does.

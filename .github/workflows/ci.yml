@@ -69,6 +69,11 @@ jobs:
           node examples/push-button/build.mjs
           node examples/push-button/build.mjs --light
 
+      - name: Sentence blocks
+        run: |
+          node examples/sentence-blocks/build.mjs
+          node examples/sentence-blocks/build.mjs --light
+
       - name: Committed pages are unchanged
         run: |
           git status --short
