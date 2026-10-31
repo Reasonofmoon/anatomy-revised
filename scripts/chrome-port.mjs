@@ -1,5 +1,38 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+export const PROFILE_STALE_MS = 120000;
+export const PROFILE_PREFIX = /^(iso-drive-|iso-capture-|iso-print-|iso-cdp-pdf-)/;
+
+export function profileBusy(path, listing) {
+  if (!path || !listing) return false;
+  return listing.includes(`--user-data-dir=${path}`) || listing.includes(`--user-data-dir="${path}"`);
+}
+
+export function processListing() {
+  if (process.env.ANATOMY_PROFILE_PS != null) return process.env.ANATOMY_PROFILE_PS;
+  const listed = spawnSync("ps", ["-eo", "command"], { encoding: "utf8" });
+  return String(listed.stdout || "");
+}
+
+export function cleanProfiles({ directory, now = Date.now(), staleMs = Number(process.env.ANATOMY_PROFILE_STALE_MS ?? PROFILE_STALE_MS), listing = processListing() } = {}) {
+  if (!directory || !existsSync(directory)) return 0;
+  let removed = 0;
+  for (const name of readdirSync(directory)) {
+    if (!PROFILE_PREFIX.test(name)) continue;
+    const path = join(directory, name);
+    try {
+      const stat = statSync(path);
+      if (!stat.isDirectory()) continue;
+      if (now - stat.mtimeMs < staleMs) continue;
+      if (profileBusy(path, listing)) continue;
+      rmSync(path, { recursive: true, force: true });
+      if (!existsSync(path)) removed++;
+    } catch { /* a live Chrome may still hold one */ }
+  }
+  return removed;
+}
 
 export function removeProfile(profile) {
   if (!profile) return;

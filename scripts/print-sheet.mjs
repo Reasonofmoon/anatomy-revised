@@ -1,7 +1,18 @@
+import { PRINT_FONT_FACE, PRINT_FONT_FAMILY, PRINT_FONT_SYNTHESIS } from "../kit/print-fonts.mjs";
+
 export const PAPER = {
   a4: { name: "A4", w: 210, h: 297, px: [794, 1123] },
   letter: { name: "Letter", w: 215.9, h: 279.4, px: [816, 1056] },
+  a4Landscape: { name: "A4 landscape", w: 297, h: 210, px: [1123, 794] },
+  letterLandscape: { name: "Letter landscape", w: 279.4, h: 215.9, px: [1056, 816] },
 };
+
+export function paperChoice({ letter = false, landscape = false } = {}) {
+  if (letter && landscape) return PAPER.letterLandscape;
+  if (landscape) return PAPER.a4Landscape;
+  if (letter) return PAPER.letter;
+  return PAPER.a4;
+}
 
 export const FORMATS = ["poster", "drawing", "detailed"];
 
@@ -130,8 +141,9 @@ export function figure(ctx, use, { crop, widthMm, pins = [], marks = [], weight 
   }
   const placed = relax(pins, PIN_GAP * perMm);
   const leaders = placed
-    .filter((pin) => Math.hypot(pin.pos[0] - pin.at[0], pin.pos[1] - pin.at[1]) > 1.6 * perMm)
-    .map((pin) => `<line x1="${round(pin.at[0])}" y1="${round(pin.at[1])}" x2="${round(pin.pos[0])}" y2="${round(pin.pos[1])}"/><circle cx="${round(pin.at[0])}" cy="${round(pin.at[1])}" r="${round(0.55 * perMm)}"/>`)
+    .map((pin) => pinLeader(pin, perMm))
+    .filter(Boolean)
+    .map((line) => `<line x1="${round(line.x1)}" y1="${round(line.y1)}" x2="${round(line.x2)}" y2="${round(line.y2)}"/><circle cx="${round(line.x2)}" cy="${round(line.y2)}" r="${round(0.55 * perMm)}"/>`)
     .join("");
   const markSvg = marks
     .map((mark) => `<circle class="ps-mark" cx="${round(mark.c[0])}" cy="${round(mark.c[1])}" r="${round(mark.r)}"/>`)
@@ -150,8 +162,22 @@ function mainOf(ctx) {
   return { main, view, crop: main.crop ?? frameOf(view) };
 }
 
+export function pinLeader(pin, perMm) {
+  const target = pin.target || pin.at;
+  const offTarget = Math.hypot(pin.pos[0] - target[0], pin.pos[1] - target[1]) > 2.5 * perMm;
+  const relaxed = Math.hypot(pin.pos[0] - pin.at[0], pin.pos[1] - pin.at[1]) > 1.6 * perMm;
+  if (!offTarget && !relaxed) return null;
+  const end = offTarget ? target : pin.at;
+  return { x1: pin.pos[0], y1: pin.pos[1], x2: end[0], y2: end[1] };
+}
+
 function pinsOf(ctx, view) {
-  return ctx.parts.map((part, index) => ({ n: index + 1, at: part.at ?? view.anchors?.[part.id] })).filter((pin) => pin.at);
+  return ctx.parts.map((part, index) => {
+    const target = part.target ?? view.anchors?.[part.id];
+    const at = part.at ?? target;
+    if (!at) return null;
+    return { n: index + 1, at, target: target || at };
+  }).filter(Boolean);
 }
 
 function detailsOf(ctx) {
@@ -176,8 +202,8 @@ const BASE_CSS = (paper) => `
 html,body{margin:0;padding:0;background:#e9e9e6}
 body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .iso[data-theme="light"]{--anatomy-paper:#ffffff;--anatomy-card:#ffffff;--anatomy-face:#ffffff}
-@font-face{font-family:"Anatomy Hangul";src:local("NanumGothic"),local("Nanum Gothic"),local("Noto Sans KR"),local("NotoSansKR-Regular"),local("Apple SD Gothic Neo"),local("Malgun Gothic")}
-.ps{width:${paper.w}mm;height:${paper.h}mm;margin:0 auto;background:#fff;overflow:hidden;color:#151517;padding:${MARGIN}mm ${MARGIN}mm 12mm;font-family:"Anatomy Hangul","NanumGothic","Noto Sans KR","Noto Sans CJK KR","Source Han Sans KR","Apple SD Gothic Neo","Malgun Gothic","Helvetica Neue",Helvetica,Arial,sans-serif;break-after:page;position:relative;word-break:keep-all}
+${PRINT_FONT_FACE}
+.ps{width:${paper.w}mm;height:${paper.h}mm;margin:0 auto;background:#fff;overflow:hidden;color:#151517;padding:${MARGIN}mm ${MARGIN}mm 12mm;font-family:${PRINT_FONT_FAMILY};${PRINT_FONT_SYNTHESIS};break-after:page;position:relative;word-break:keep-all}
 .ps:last-of-type{break-after:auto}
 @media screen{html:not(.ps-bare) .ps{margin:10mm auto;box-shadow:0 1px 2px #0002,0 8px 30px #0001}html.ps-bare,html.ps-bare body{background:#fff}}
 @media print{html,body{background:#fff}.ps{margin:0;box-shadow:none}}

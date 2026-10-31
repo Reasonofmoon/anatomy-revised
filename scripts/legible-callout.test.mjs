@@ -47,6 +47,23 @@ test("teaching text at the desktop minimum passes", async () => {
   assert.match(checked.stdout, /teaching text at least 28px/);
 });
 
+test("secondary text has its own minimum and text scrolled off a strip is not visible", async () => {
+  const small = `${closed}<div data-legible="secondary" style="font:4px/1 sans-serif">H</div>`;
+  const failed = await run(lines, small, []);
+  assert.equal(failed.code, 1);
+  assert.match(failed.stdout, /secondary text/);
+  assert.match(failed.stdout, /under 6px/);
+  const ok = `${closed}<div data-legible style="font:32px/1.15 sans-serif">Tom</div><div data-legible="secondary" style="font:8px/1 sans-serif">1.008</div>`;
+  const passed = await run(lines, ok, []);
+  assert.equal(passed.code, 0, passed.stdout + passed.stderr);
+  assert.match(passed.stdout, /secondary text at least 6px/);
+  const scrolled = `${closed}<div style="width:120px;overflow-x:auto"><div style="width:640px"><span data-legible style="display:inline-block;font:32px/1.15 sans-serif">On</span><span data-legible style="display:inline-block;margin-left:420px;font:32px/1.15 sans-serif">Offscreen</span></div></div>`;
+  const strip = await run(lines, scrolled, []);
+  assert.equal(strip.code, 0, strip.stdout + strip.stderr);
+  assert.match(strip.stdout, /1 visible text/);
+  assert.doesNotMatch(strip.stdout, /Offscreen/);
+});
+
 test("a callout that covers a marked word fails", async () => {
   const html = `${closed}<div data-important="subject" style="position:absolute;left:30px;top:40px;width:100px;height:48px;background:#FDE68A">Tom</div><div data-callout="note" style="position:absolute;left:30px;top:40px;width:100px;height:48px">this covers Tom</div>`;
   const checked = await run(lines, html, []);

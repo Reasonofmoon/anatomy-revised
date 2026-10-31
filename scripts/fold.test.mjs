@@ -28,6 +28,8 @@ test("fold nets carry teaching text, hinges and a glue tab", () => {
   assert.match(html, />Tom</);
   assert.match(html, /class="fn-glue"/);
   assert.match(html, /data-important="subject"/);
+  assert.match(html, /fn-glue" data-legible="secondary"/);
+  assert.match(html, /fn-slot-tag" data-legible="secondary"/);
   assert.match(html, /data-fold-hint data-important="hint"/);
   assert.match(html, /S \+ V \+ O/);
   const css = foldCss();
@@ -73,5 +75,15 @@ test("cut-and-fold sheet keeps words at the print minimum", () => {
   assert.doesNotMatch(korean, /<b>Cut\.<\/b>/);
   assert.match(korean, /Anatomy Hangul/);
   assert.match(korean, /local\("NanumGothic"\)/);
+  assert.match(korean, /font-weight:700/);
+  assert.match(korean, /font-synthesis:none/);
+  const doubled = foldSheetDocument({
+    title: "문장",
+    labels: { cutMark: "자르기.", cut: "자르기. 실선을 따라 자른다", foldMark: "접기.", fold: "접기. 점선", glueMark: "풀칠.", glue: "풀칠. 탭" },
+    pages: [{ bands: [{ blocks: [block] }] }],
+  });
+  assert.equal((doubled.match(/자르기\./g) || []).length, 1);
+  assert.match(doubled, /<b>자르기\.<\/b> 실선을 따라 자른다/);
+  assert.doesNotMatch(doubled, /자르기\. 자르기\./);
   assert.match(korean, /line-height:1\.05/);
 });

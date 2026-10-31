@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FORMATS, PAPER, boxOf, detailedPlan, fitAspect, focusCrop, layerTable, pagesOf, relax, sheetHtml } from "./print-sheet.mjs";
+import { FORMATS, PAPER, boxOf, detailedPlan, fitAspect, focusCrop, layerTable, pagesOf, paperChoice, pinLeader, relax, sheetHtml } from "./print-sheet.mjs";
 import { captureScript } from "./print.mjs";
 
 const layer = (id) => `<g class="it" data-print-part="${id}" style="--anatomy-hi:var(--on-${id}-hi,var(--part-hi,#26262a));display:var(--show-${id},inline)"><path d="M0 0L10 10"/></g>`;
@@ -116,12 +116,37 @@ test("Letter paper changes the page size and unknown formats throw", () => {
   assert.throws(() => sheetHtml(fakeCapture(), SPEC, PAPER.a4, "zine"), /unknown format/);
 });
 
-test("captureScript is one expression that carries the part selectors", () => {
+test("landscape paper is A4 or Letter turned on its side", () => {
+  assert.deepEqual(paperChoice({ landscape: true }), PAPER.a4Landscape);
+  assert.deepEqual(paperChoice({ letter: true, landscape: true }), PAPER.letterLandscape);
+  assert.match(sheetHtml(fakeCapture(), SPEC, PAPER.a4Landscape, "poster"), /@page\{size:297mm 210mm/);
+  assert.match(sheetHtml(fakeCapture(), SPEC, PAPER.letterLandscape, "poster"), /@page\{size:279\.4mm 215\.9mm/);
+});
+
+test("a pin placed off its anchor draws a leader to the target", () => {
+  const spec = {
+    ...SPEC,
+    parts: [
+      { id: "pump", name: "Pump", say: "Raises the pressure.", at: [40, 40] },
+      { id: "bell", name: "Bell", say: "Turns pressure into speed." },
+    ],
+  };
+  const view = fakeCapture().views.apart;
+  const leader = pinLeader({ n: 1, at: [40, 40], target: view.anchors.pump, pos: [40, 40] }, 1);
+  assert.ok(leader);
+  assert.deepEqual([leader.x2, leader.y2], view.anchors.pump);
+  const html = sheetHtml(fakeCapture(), spec, PAPER.a4, "poster");
+  assert.match(html, /<line x1="40" y1="40" x2="140" y2="130"/);
+});
+
+test("captureScript is one expression that carries the part selectors and copies computed colour", () => {
   const script = captureScript({ parts: [{ id: "pump", name: "Pump", select: '[data-name^="pump"]' }, { id: "x", name: "X" }], strip: [".glow"] });
   assert.doesNotThrow(() => new Function(`return ${script}`));
   assert.ok(script.includes('[data-name^=\\"pump\\"]'));
   assert.ok(script.includes(".glow"));
   assert.ok(!script.includes('"id":"x"'));
+  assert.match(script, /paintedStyle/);
+  assert.match(script, /function inlinePaint/);
 });
 
 test("detailed grows from 2 to 4 pages with steps and assemblies, under a cap", () => {
@@ -145,5 +170,8 @@ test("poster titles keep wrapped CJK from colliding and prefer an outline Korean
   assert.match(html, /word-break:keep-all/);
   assert.match(html, /Anatomy Hangul/);
   assert.match(html, /local\("NanumGothic"\)/);
+  assert.match(html, /font-weight:700/);
+  assert.match(html, /font-synthesis:none/);
+  assert.match(html, /local\("NanumGothicBold"\)/);
   assert.match(html, /문장 조립 라인/);
 });

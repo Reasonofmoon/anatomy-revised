@@ -45,7 +45,10 @@ Colours are per block, not a fixed grammar palette. Pass `labels` to replace the
 |---|---|
 | `.iso-face-text` | Warning under 12px of rendered height. It is an engraving. |
 | `[data-legible]`, including every `.fn-word` | Failure under 28px when the viewport is at least 1100px wide, and under 16px below that. |
+| `[data-legible="secondary"]` | A smaller tier for tile metadata and glue-tab or slot labels. Failure under 6px at desktop width, under 5px below 1100px. Opt in with the attribute. Glue tabs and slot tags on the nets carry it. |
 | Cut-and-fold sheet | The word is 20pt or larger. Long words widen the net; they do not shrink the type. |
+
+Text that is scrolled out of the viewport, or out of an `overflow-x` strip, is not counted. A folded run says to measure the nets with `lines.mjs --state unfolded`.
 
 `capture.mjs` prints the check and exits 1 on a teaching-text failure. `lines.mjs` does the same in whatever state the page is in, so unfold before you measure the nets:
 
@@ -70,8 +73,10 @@ const html = foldSheetDocument({
 });
 ```
 
-Each net is a cross: solid outer cut, dashed hinge, shaded glue tab, the word, the role, and the key. `labels.cutMark`, `labels.foldMark` and `labels.glueMark` replace the `Cut.` / `Fold.` / `Glue.` prefixes (for instance Korean `자르기.` / `접기.` / `풀칠.`). Print it with `scripts/print.mjs` when it is a figure sheet, or with the same `Page.printToPDF` path that `print.mjs` uses as its fallback. `@page` is A4. The sheet's font stack requests an outline Korean face by its local name (`NanumGothic`, Noto Sans KR). Chrome's Linux PDF writer still embeds that face as Type 3; the stack is as far as this repo goes without a PDF library.
+Each net is a cross: solid outer cut, dashed hinge, shaded glue tab, the word, the role, and the key. `labels.cutMark`, `labels.foldMark` and `labels.glueMark` replace the `Cut.` / `Fold.` / `Glue.` prefixes (for instance Korean `자르기.` / `접기.` / `풀칠.`). If the instruction already starts with that mark, the sheet prints the mark once. Print it with `scripts/print.mjs` when it is a figure sheet, or with the same `Page.printToPDF` path that `print.mjs` uses as its fallback. `@page` is A4.
+
+The sheet's font stack is `kit/print-fonts.mjs`. It registers a local Korean face at weight 400 (`NanumGothic`, Noto Sans KR) and at weight 700 (the bold file, or the regular file if no bold is installed), and sets `font-synthesis: none`. A real TrueType file then embeds as CID TrueType instead of a faux-bold Type 3. Chrome can still emit Type 3 for a face it will not subset, and for some SVG text. This repo does not add a PDF library or ship a multi-megabyte font file.
 
 ## Callouts
 
-Mark the parts that must stay readable with `data-important`. The fold hint is marked that way already. `calloutRuntime()` measures each mark, including the absolute-positioned flaps and glue tab that stick out of a net, and moves each `[data-callout]` to the spot from `placeCallout` that covers the least area, clamped inside `[data-fold-stage]`. A drawing dimmed to about 0.2 opacity (the machine while the nets are open) is not an obstacle. `lines.mjs` fails if a bubble still covers 8% or more of a marked part. On a narrow screen the unfolded nets take a taller stage and the callout hides so it cannot sit on a wrapped net. A callout is a last resort; the net's own label is the one a reader should see first.
+Mark the parts that must stay readable with `data-important`. The fold hint is marked that way already. `calloutRuntime()` measures each mark, including the absolute-positioned flaps and glue tab that stick out of a net, and moves each `[data-callout]` to the spot from `placeCallout` that covers the least area. The origin is that bubble's `offsetParent`, not the plate's padding box. A graze smaller than `max(2px², 0.5% of the bubble)` does not count, and two further rings are tried before a corner. When the bubble lands more than 1.8 gaps from its target, an `.an-callout-leader` line runs from the bubble to the anchor. Each placed bubble is an obstacle for the next one. A drawing dimmed to about 0.2 opacity, or an `.iso-svg` whose stage is `data-stage-fold="unfolded"`, is not an obstacle. The nudge runs again after the 380ms unfold fade. `lines.mjs` fails if a bubble still covers 8% or more of a marked part. On a narrow screen the unfolded nets take a taller stage and the callout hides so it cannot sit on a wrapped net. Callout type is `clamp(8px, 1.05cqw, 13px)`. A callout is a last resort; the net's own label is the one a reader should see first.
