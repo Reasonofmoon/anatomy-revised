@@ -88,6 +88,7 @@ async function browser(target, { width, height, scale, throttle, noWebgl }) {
   };
   await send("Runtime.enable");
   await send("Page.enable");
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   const NO_GL = `(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...rest){if(/webgl/.test(String(kind))&&!this.dataset.check)return null;return get.call(this,kind,...rest)}})();`;
   if (noWebgl) await send("Page.addScriptToEvaluateOnNewDocument", { source: NO_GL });
   await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 });

@@ -35,7 +35,7 @@ test("rejects a nonfinite fine step instead of silently skipping the second diff
 });
 test("preserves a valid native orbit sweep and its planted control", async () => {
   const result = await run(["--order", "--step", "360"]);
-  assert.equal(result.code, 0); assert.match(result.stdout, /order: 1 states/);
+  assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`); assert.match(result.stdout, /order: 1 states/);
   assert.match(result.stdout, /order control.*fails as it should/); assert.match(result.stdout, /turn check passed/);
 });
 
