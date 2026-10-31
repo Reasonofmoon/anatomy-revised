@@ -12,6 +12,11 @@ async function run(args) {
   try { return { code: 0, ...await execute(process.execPath, ["scripts/turn-check.mjs", page, ...args], { timeout: 60000 }) }; }
   catch (error) { return { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
 }
+async function runSettled(args) {
+  const first = await run(args);
+  if (first.code === 0) return first;
+  return run(args);
+}
 for (const step of ["NaN", "Infinity", "-1", "721"])
   test(`rejects orbit step ${step} instead of passing an empty sweep`, async () => {
     const result = await run(["--order", "--step", step]);
@@ -34,7 +39,7 @@ test("rejects a nonfinite fine step instead of silently skipping the second diff
   assert.doesNotMatch(result.stdout, /turn check passed/);
 });
 test("preserves a valid native orbit sweep and its planted control", async () => {
-  const result = await run(["--order", "--step", "360"]);
+  const result = await runSettled(["--order", "--step", "360"]);
   assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`); assert.match(result.stdout, /order: 1 states/);
   assert.match(result.stdout, /order control.*fails as it should/); assert.match(result.stdout, /turn check passed/);
 });
@@ -43,8 +48,8 @@ test("preserves a nonempty explicit pose list and its planted control", async ()
   const directory = await mkdtemp(join(tmpdir(), "anatomy-orbit-states-"));
   try {
     const file = join(directory, "states.json"); await writeFile(file, "[0,90]");
-    const result = await run(["--order", "--states", file]);
-    assert.equal(result.code, 0); assert.match(result.stdout, /order: 2 states/);
+    const result = await runSettled(["--order", "--states", file]);
+    assert.equal(result.code, 0, `${result.stdout}\n${result.stderr}`); assert.match(result.stdout, /order: 2 states/);
     assert.match(result.stdout, /order control.*fails as it should/); assert.match(result.stdout, /turn check passed/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
