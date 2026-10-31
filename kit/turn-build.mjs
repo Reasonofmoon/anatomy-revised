@@ -21,10 +21,14 @@ const pack = (value) => JSON.parse(JSON.stringify(value, (key, v) => (typeof v =
 const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function octOf(n) {
-  const l = Math.abs(n[0]) + Math.abs(n[1]) + Math.abs(n[2]) || 1;
-  let x = n[0] / l;
-  let y = n[1] / l;
-  if (n[2] < 0) {
+  const snap = (v) => Math.abs(v) < 1e-4 ? 0 : v;
+  const nx = snap(n[0]);
+  const ny = snap(n[1]);
+  const nz = snap(n[2]);
+  const l = Math.abs(nx) + Math.abs(ny) + Math.abs(nz) || 1;
+  let x = nx / l;
+  let y = ny / l;
+  if (nz < 0) {
     const ox = (1 - Math.abs(y)) * (x >= 0 ? 1 : -1);
     const oy = (1 - Math.abs(x)) * (y >= 0 ? 1 : -1);
     x = ox;
