@@ -1,6 +1,6 @@
-import { chromePort, killChrome, removeProfile } from "./chrome-port.mjs";
+import { chromePort, cleanProfiles, killChrome, removeProfile } from "./chrome-port.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,17 +10,8 @@ import { LINE_ENDS } from "./line-ends.mjs";
 
 if (process.argv.includes("--clean-profiles")) {
   const directory = process.env.ANATOMY_PROFILE_DIR || tmpdir();
-  let removed = 0;
-  for (const name of readdirSync(directory)) {
-    if (!name.startsWith("iso-drive-")) continue;
-    const path = join(directory, name);
-    try {
-      if (!statSync(path).isDirectory()) continue;
-      rmSync(path, { recursive: true, force: true });
-      removed++;
-    } catch { /* a live Chrome may still hold one */ }
-  }
-  console.log(`removed ${removed} iso-drive profile${removed === 1 ? "" : "s"}`);
+  const removed = cleanProfiles({ directory });
+  console.log(`removed ${removed} leftover profile${removed === 1 ? "" : "s"}`);
   process.exit(0);
 }
 
@@ -38,7 +29,8 @@ function usage() {
   node drive.mjs <file.html | url> --actions steps.json
 
   --reduced     emulate prefers-reduced-motion: reduce (the default is no-preference, even when the OS reduces motion)
-  --clean-profiles   delete leftover /tmp/iso-drive-* Chrome profiles and exit
+  --clean-profiles   delete leftover Chrome profiles in /tmp (iso-drive-*, iso-capture-*, iso-print-*, iso-cdp-pdf-*)
+                     that are older than ANATOMY_PROFILE_STALE_MS (default 120s) and have no live process using them, then exit
   --theme t     emulate prefers-color-scheme: dark or light (only pages that read the media query follow it)
   --no-webgl    make canvas.getContext("webgl"/"webgl2") return null, to check the SVG fallback
   --preload js  run a script before the page's own scripts (counters, stubs, hooks)

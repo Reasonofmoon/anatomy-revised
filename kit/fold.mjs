@@ -47,7 +47,7 @@ export function foldNetsHtml(blocks = [], labels = {}) {
     const weight = Number(block.weight ?? Math.max(1, String(block.text || "").length / 6));
     const important = block.important ? ` data-important="${escapeHtml(block.important)}"` : "";
     const note = block.note ? `<div class="fn-note">${escapeHtml(block.note)}</div>` : "";
-    return `<div class="fn-net" data-net="${escapeHtml(block.id ?? index)}" data-role="${escapeHtml(block.role || "")}" data-slot="${escapeHtml(block.slot ?? index)}"${compact}${important} style="flex:${weight.toFixed(2)} 1 0%;${styleOf(block)}"><div class="fn-flap fn-flap-top"><div class="fn-glue">${glue}</div></div><div class="fn-flap fn-flap-left"></div><div class="fn-flap fn-flap-right"></div><div class="fn-main"><div class="fn-word" data-legible data-net-word>${escapeHtml(block.text)}</div><div class="fn-role">${escapeHtml(block.label || "")}</div>${note}</div><div class="fn-flap fn-flap-bottom"><span class="fn-slot-tag">${escapeHtml(block.key || block.slot || "")}</span></div></div>`;
+    return `<div class="fn-net" data-net="${escapeHtml(block.id ?? index)}" data-role="${escapeHtml(block.role || "")}" data-slot="${escapeHtml(block.slot ?? index)}"${compact}${important} style="flex:${weight.toFixed(2)} 1 0%;${styleOf(block)}"><div class="fn-flap fn-flap-top"><div class="fn-glue" data-legible="secondary">${glue}</div></div><div class="fn-flap fn-flap-left"></div><div class="fn-flap fn-flap-right"></div><div class="fn-main"><div class="fn-word" data-legible data-net-word>${escapeHtml(block.text)}</div><div class="fn-role">${escapeHtml(block.label || "")}</div>${note}</div><div class="fn-flap fn-flap-bottom"><span class="fn-slot-tag" data-legible="secondary">${escapeHtml(block.key || block.slot || "")}</span></div></div>`;
   }).join("");
 }
 
@@ -63,7 +63,7 @@ export function foldLayerHtml({ blocks = [], labels = {}, state = "unfolded", fo
 }
 
 export function foldCss() {
-  return `.fn-stage{position:relative;cursor:pointer;user-select:none}
+  return `.fn-stage{position:relative;cursor:pointer;user-select:none;container-type:inline-size}
 .fn-stage>.iso-svg{transition:opacity 380ms cubic-bezier(.32,.72,0,1)}
 .fn-stage[data-fold-instant]>.iso-svg,.fn-stage[data-fold-instant] .fn-net,.fn-stage[data-fold-instant] .fn-flap{transition:none}
 .fn-stage[data-stage-fold="unfolded"]>.iso-svg,.fn-stage[data-stage-fold="folding"]>.iso-svg{opacity:.2}
@@ -103,7 +103,7 @@ export function foldCss() {
 .fn-legend-word{font-size:32px;font-weight:800;line-height:1.15;color:var(--fn-ink)}
 .fn-legend-role{font-size:15px;font-weight:700;color:var(--fn-sub)}
 @media (prefers-reduced-motion:reduce){.fn-net,.fn-flap,.fn-stage>.iso-svg{transition:none!important}.fn-legend{display:flex}}
-@media (max-width:640px){.fn-nets{flex-wrap:wrap}.fn-net{margin:18px 12px 24px;flex:1 1 130px!important}.fn-layer[data-fold-state="folded"] .fn-center,.fn-layer[data-fold-state="folded"] .fn-hint{display:none}.fn-stage[data-stage-fold="unfolded"]{min-height:520px}.fn-stage[data-stage-fold="unfolded"]>.iso-svg{position:absolute;inset:0;width:100%;height:100%}.fn-stage[data-stage-fold="unfolded"] .fn-layer{position:relative;min-height:520px}.fn-stage[data-stage-fold="unfolded"] .an-callout{display:none}}
+@media (max-width:640px){.fn-nets{flex-wrap:wrap}.fn-net{margin:18px 12px 24px;flex:1 1 130px!important}.fn-layer[data-fold-state="folded"] .fn-center,.fn-layer[data-fold-state="folded"] .fn-hint{display:none}.fn-stage[data-stage-fold="unfolded"]{min-height:520px}.fn-stage[data-stage-fold="unfolded"]>.iso-svg{position:absolute;inset:0;width:100%;height:100%}.fn-stage[data-stage-fold="unfolded"] .fn-layer{position:relative;min-height:520px}.fn-stage[data-stage-fold="unfolded"] .an-callout,.fn-stage[data-stage-fold="unfolded"] .an-callout-leader{display:none}}
 `;
 }
 
@@ -141,7 +141,7 @@ function render(next, extra) {
     const weight = Number(block.weight ?? Math.max(1, String(block.text || "").length / 6));
     const important = block.important ? " data-important=\\"" + esc(block.important) + "\\"" : "";
     const note = block.note ? "<div class=\\"fn-note\\">" + esc(block.note) + "</div>" : "";
-    return "<div class=\\"fn-net\\" data-net=\\"" + esc(block.id ?? index) + "\\" data-role=\\"" + esc(block.role || "") + "\\" data-slot=\\"" + esc(block.slot ?? index) + "\\"" + compact + important + " style=\\"flex:" + weight.toFixed(2) + " 1 0%;" + style + "\\"><div class=\\"fn-flap fn-flap-top\\"><div class=\\"fn-glue\\">" + glue + "</div></div><div class=\\"fn-flap fn-flap-left\\"></div><div class=\\"fn-flap fn-flap-right\\"></div><div class=\\"fn-main\\"><div class=\\"fn-word\\" data-legible data-net-word>" + esc(block.text) + "</div><div class=\\"fn-role\\">" + esc(block.label || "") + "</div>" + note + "</div><div class=\\"fn-flap fn-flap-bottom\\"><span class=\\"fn-slot-tag\\">" + esc(block.key || block.slot || "") + "</span></div></div>";
+    return "<div class=\\"fn-net\\" data-net=\\"" + esc(block.id ?? index) + "\\" data-role=\\"" + esc(block.role || "") + "\\" data-slot=\\"" + esc(block.slot ?? index) + "\\"" + compact + important + " style=\\"flex:" + weight.toFixed(2) + " 1 0%;" + style + "\\"><div class=\\"fn-flap fn-flap-top\\"><div class=\\"fn-glue\\" data-legible=\\"secondary\\">" + glue + "</div></div><div class=\\"fn-flap fn-flap-left\\"></div><div class=\\"fn-flap fn-flap-right\\"></div><div class=\\"fn-main\\"><div class=\\"fn-word\\" data-legible data-net-word>" + esc(block.text) + "</div><div class=\\"fn-role\\">" + esc(block.label || "") + "</div>" + note + "</div><div class=\\"fn-flap fn-flap-bottom\\"><span class=\\"fn-slot-tag\\" data-legible=\\"secondary\\">" + esc(block.key || block.slot || "") + "</span></div></div>";
   }).join("");
   const legend = document.querySelector("[data-fold-legend]");
   if (legend) legend.innerHTML = blocks.map((block) => {

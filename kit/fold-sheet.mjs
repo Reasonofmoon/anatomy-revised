@@ -1,6 +1,7 @@
 // A4 cut-and-fold sheet: one cross-shaped net per block, solid cut lines,
 // dashed hinges, glue tabs, and teaching words at 20pt or larger.
 import { escapeHtml } from "./fold.mjs";
+import { PRINT_FONT_FACE, PRINT_FONT_FAMILY, PRINT_FONT_SYNTHESIS } from "./print-fonts.mjs";
 
 export const SHEET_LABELS = {
   title: "Cut and fold paper nets",
@@ -14,7 +15,16 @@ export const SHEET_LABELS = {
   footer: "Sentence blocks",
 };
 
-const PRINT_FONTS = `"Anatomy Hangul","NanumGothic","Noto Sans KR","Noto Sans CJK KR","Source Han Sans KR","Apple SD Gothic Neo","Malgun Gothic","Helvetica Neue",Helvetica,Arial,sans-serif`;
+function marked(mark, text) {
+  const prefix = String(mark || "").trim();
+  const body = String(text || "").trim();
+  if (!prefix) return escapeHtml(body);
+  if (body === prefix || body.startsWith(`${prefix} `) || (prefix && body.startsWith(prefix))) {
+    const rest = body.slice(prefix.length).trim();
+    return `<b>${escapeHtml(prefix)}</b>${rest ? ` ${escapeHtml(rest)}` : ""}`;
+  }
+  return `<b>${escapeHtml(prefix)}</b>${body ? ` ${escapeHtml(body)}` : ""}`;
+}
 
 function styleOf(block) {
   return `--n-fill:${block.fill || "#fff"};--n-top:${block.top || block.fill || "#fff"};--n-flap:${(block.shades && block.shades[0]) || block.fill || "#eee"};--n-edge:${block.edge || "#222"};--n-ink:${block.ink || "#111"};--n-sub:${block.sub || block.ink || "#333"}`;
@@ -34,12 +44,12 @@ function bandHtml(band, labels) {
 }
 
 export function foldSheetCss() {
-  return `@font-face{font-family:"Anatomy Hangul";src:local("NanumGothic"),local("Nanum Gothic"),local("Noto Sans KR"),local("NotoSansKR-Regular"),local("Apple SD Gothic Neo"),local("Malgun Gothic")}
+  return `${PRINT_FONT_FACE}
 @page{size:210mm 297mm;margin:0}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#e9e9e6;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{html,body{background:#fff}.fs-page{margin:0!important;box-shadow:none!important}}
-.fs-page{width:210mm;height:297mm;margin:0 auto;padding:8mm 10mm 7mm;background:#fff;color:#151517;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;break-after:page;font-family:${PRINT_FONTS}}
+.fs-page{width:210mm;height:297mm;margin:0 auto;padding:8mm 10mm 7mm;background:#fff;color:#151517;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;break-after:page;font-family:${PRINT_FONT_FAMILY};${PRINT_FONT_SYNTHESIS}}
 .fs-page:last-of-type{break-after:auto}
 .fs-hd{border-bottom:.3mm solid #151517;padding-bottom:1.8mm;margin-bottom:2mm}
 .fs-hd h1{margin:0;font-size:13pt;font-weight:800;letter-spacing:-.02em}
@@ -79,7 +89,7 @@ export function foldSheetDocument({ title, pages = [], labels = {} } = {}) {
   const total = pages.length || 1;
   const body = pages.map((page, index) => {
     const bands = (page.bands || []).map((band) => bandHtml(band, text)).join("");
-    return `<section class="fs-page"><header class="fs-hd"><h1>${escapeHtml(text.title)}</h1><p class="fs-sub">${escapeHtml(page.subtitle || "")}</p><div class="fs-instr"><span><b>${escapeHtml(text.cutMark)}</b> ${escapeHtml(text.cut)}</span><span><b>${escapeHtml(text.foldMark)}</b> ${escapeHtml(text.fold)}</span><span><b>${escapeHtml(text.glueMark)}</b> ${escapeHtml(text.glue)}</span></div></header><div class="fs-body">${bands}</div><footer class="fs-ft"><span>${escapeHtml(text.footer)}</span><span>A4 · ${index + 1} / ${total}</span></footer></section>`;
+    return `<section class="fs-page"><header class="fs-hd"><h1>${escapeHtml(text.title)}</h1><p class="fs-sub">${escapeHtml(page.subtitle || "")}</p><div class="fs-instr"><span>${marked(text.cutMark, text.cut)}</span><span>${marked(text.foldMark, text.fold)}</span><span>${marked(text.glueMark, text.glue)}</span></div></header><div class="fs-body">${bands}</div><footer class="fs-ft"><span>${escapeHtml(text.footer)}</span><span>A4 · ${index + 1} / ${total}</span></footer></section>`;
   }).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(text.title)}</title><style>${foldSheetCss()}</style></head><body>${body}</body></html>`;
 }

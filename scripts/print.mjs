@@ -4,7 +4,8 @@ import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { FORMATS, PAPER, pagesOf, sheetHtml } from "./print-sheet.mjs";
+import { capturePaintPrelude } from "./print-paint.mjs";
+import { FORMATS, paperChoice, pagesOf, sheetHtml } from "./print-sheet.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DRIVE = join(HERE, "drive.mjs");
@@ -12,7 +13,7 @@ const DRIVE = join(HERE, "drive.mjs");
 function usage() {
   console.log(`Print a figure as an explained drawing on one A4 sheet: an HTML page and a PDF.
 
-  node print.mjs <sheet.mjs> [--format poster|drawing|detailed|all] [--letter] [--png] [--out name]
+  node print.mjs <sheet.mjs> [--format poster|drawing|detailed|all] [--letter] [--landscape] [--png] [--out name]
 
   sheet.mjs     a module whose default export names the built page, the poses to capture, the parts and the text
                 (see references/print.md and examples/raptor-engine/sheet.mjs)
@@ -20,16 +21,18 @@ function usage() {
                 specification and a strip of steps), detailed (two pages: the figure with every part, then the steps,
                 close-ups and the why), or all
   --letter      US Letter instead of A4
+  --landscape   landscape paper (A4 297×210 mm, or Letter 279.4×215.9 mm with --letter)
   --png         also write a preview PNG of the sheet
   --out name    output base name (default: the spec's out, else the page name)
 
-Writes <name>-<format>-a4.html and .pdf next to the spec. poster, drawing and detailed are unchanged.
+Writes <name>-<format>-a4.html and .pdf next to the spec (-letter, -a4-landscape or -letter-landscape). poster, drawing and detailed are unchanged.
 On Linux, Chrome --print-to-pdf hangs, so the PDF is printed with Page.printToPDF directly (set
 ANATOMY_PRINT_FORCE_CLI=1 to try the flag anyway). Elsewhere the flag is killed after ANATOMY_PRINT_TIMEOUT_MS
 (default 20s) and Page.printToPDF runs with its own ANATOMY_PRINT_FALLBACK_TIMEOUT_MS (default 20s). Lowering the
 first timeout does not shorten the fallback. If both fail, the script prints both reasons and exits. Pose capture
 through drive.mjs is killed, process group included, after 120s. node scripts/drive.mjs --clean-profiles deletes
-leftover /tmp/iso-drive-* directories.`);
+leftover /tmp profiles (iso-drive-*, iso-capture-*, iso-print-*, iso-cdp-pdf-*) that are older than
+ANATOMY_PROFILE_STALE_MS (default 120s) and not in use by a live Chrome.`);
 }
 
 export function chromePath() {
@@ -71,6 +74,7 @@ export function captureScript(spec) {
   return `(() => {
   const C = ${JSON.stringify(config)};
   const TONES = ["hi", "mid", "lo", "dot"];
+  ${capturePaintPrelude()}
   const layers = [...document.querySelectorAll(C.layers)].filter((svg) => svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width);
   if (!layers.length) return { __print: true, error: "no layers match " + C.layers };
   const base = layers[0];
@@ -107,13 +111,18 @@ export function captureScript(spec) {
     const walkClone = [...clone.querySelectorAll("*")];
     walkLive.forEach((el, at) => {
       const id = live.get(el);
-      if (!id) return;
-      const cs = getComputedStyle(el);
-      const tokens = TONES.map((tone) => "--anatomy-" + tone + ":var(--on-" + id + "-" + tone + ",var(--part-" + tone + "," + (cs.getPropertyValue("--anatomy-" + tone).trim() || "currentColor") + "))").join(";");
+      const paint = paintedStyle(el, id);
+      if (!id && !paint) return;
       const target = walkClone[at];
       const own = target.getAttribute("style");
-      target.setAttribute("style", (own ? own.replace(/;?\\s*$/, ";") : "") + tokens + ";display:var(--show-" + id + "," + (cs.display === "none" ? "none" : "inline") + ")");
-      target.setAttribute("data-print-part", id);
+      let extra = paint;
+      if (id) {
+        const cs = getComputedStyle(el);
+        const tokens = TONES.map((tone) => "--anatomy-" + tone + ":var(--on-" + id + "-" + tone + ",var(--part-" + tone + "," + (cs.getPropertyValue("--anatomy-" + tone).trim() || "currentColor") + "))").join(";");
+        extra = (paint ? paint + ";" : "") + tokens + ";display:var(--show-" + id + "," + (cs.display === "none" ? "none" : "inline") + ")";
+        target.setAttribute("data-print-part", id);
+      }
+      target.setAttribute("style", (own ? own.replace(/;?\\s*$/, ";") : "") + extra);
     });
     for (const sel of C.strip) clone.querySelectorAll(sel).forEach((el) => el.remove());
     clone.querySelectorAll("title,desc").forEach((el) => el.remove());
@@ -440,10 +449,11 @@ async function printMain() {
     process.exit(argv.length ? 0 : 1);
   }
   const rest = [];
-  const options = { letter: false, png: false, out: null, format: null };
+  const options = { letter: false, landscape: false, png: false, out: null, format: null };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--letter") options.letter = true;
+    else if (arg === "--landscape") options.landscape = true;
     else if (arg === "--png") options.png = true;
     else if (arg === "--out") options.out = argv[++index];
     else if (arg === "--format") options.format = argv[++index];
@@ -454,7 +464,7 @@ async function printMain() {
   const dir = dirname(specFile);
   const pagePath = resolve(dir, spec.page);
   if (!existsSync(pagePath)) throw new Error(`no built page at ${pagePath}; build the figure with --light first`);
-  const paper = options.letter ? PAPER.letter : PAPER.a4;
+  const paper = paperChoice(options);
   const formats = options.format === "all" ? FORMATS : [options.format ?? spec.format ?? "poster"];
   for (const format of formats) if (!FORMATS.includes(format)) throw new Error(`unknown format "${format}"; use one of ${FORMATS.join(", ")} or all`);
   const base = options.out ?? spec.out ?? spec.page.replace(/(-light)?\.html$/, "");
@@ -464,7 +474,7 @@ async function printMain() {
   }
   let failed = false;
   for (const format of formats) {
-    const name = `${base}-${format}-${options.letter ? "letter" : "a4"}`;
+    const name = `${base}-${format}-${options.letter ? "letter" : "a4"}${options.landscape ? "-landscape" : ""}`;
     const html = sheetHtml(captured, spec, paper, format);
     const htmlFile = join(dir, `${name}.html`);
     writeFileSync(htmlFile, html);

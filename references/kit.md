@@ -36,6 +36,7 @@ type LineTone = Tone | "lit" | "red" | "green" | "blue";
 | Function | What it does |
 |---|---|
 | `fitProjection(points: Point3[], width, height, { pad = 24, headroom = 0, azimuth = 45, elevation = 30 })` | A projection that centres and fits these points in the viewBox. Pass every extreme point, such as `boxCorners(plan, z0, z1)` and the tallest tip. |
+| `GRID_AZIMUTH` (86.5), `GRID_ELEVATION` (67) | The camera for a dense flat grid (a table, a panel). Azimuth stays near 90 so columns stay columns instead of a 45° diamond, and elevation stays high enough to read the tops with a little thickness. Pass both to `fitProjection`. |
 | `iso(point, P)` | World to screen. |
 | `depthOf(point, P)` | Larger means nearer the viewer. Sort ascending to paint back to front. |
 | `towardViewer(P)` | The floor direction pointing at the viewer, `[cos a, sin a]`. Faces whose normal points this way are visible. |
@@ -113,14 +114,16 @@ Rotations about z can't be done with a screen transform: rebuild the rotating pa
 | `fadedSvg(list, style)` | Draws a set of lines that each carry an opacity, `[{ d, alpha }]` or `[d, alpha]`, as returned by `ribsOf(..., { fade })`. Lines are grouped by opacity in steps of 0.05, each group in one `<g opacity>`, and lines under 0.02 are dropped. Use it for any texture whose members fade one by one toward a limb: ribs, fins, knurls, rule lines. |
 | `fadeLineSvg(points, { fade = [start, end], tone = "lo", className, stops = 6 })` | One line (screen points) that fades out over its first `start` and last `end` px instead of stopping (each ramp carries `data-free` on its faded end, so the line check passes it). Each ramp is stroked with a `userSpaceOnUse` linear gradient along its own chord (a smoothstep in `stops` steps, the colour taken from `var(--anatomy-<tone>)`, so both themes work), and the middle is a plain `lineSvg`, so there are no overlapping caps, beads or seams. Use it for a texture line that ends in the middle of a face: a groove that runs out, a weld line that stops short of a corner, a rule on a curved plate. Keep a ramp shorter than a quarter turn of the line, since a linear gradient follows the chord. Gradient ids are a hash of the path, so the same line drawn twice shares one. |
 | `wireSvg(from, to, { via = [], tone = "lo", dotted, dashed, flow, ends: "both" \| "from" \| "to" \| "none", size = 1.2 })` | A connector with terminal dots. |
-| `faceTextSvg(transform, text, { size = 3, tone = "mid", anchor })` | |
+| `faceTextSvg(transform, text, { size = 3, tone = "mid", anchor })` | Sheared type on a face, from `topMatrix`. An engraving, not a word a reader must read. |
+| `flatLabelSvg(point, P, text, { size = 3, tone = "mid", anchor = "middle", dy = 0, className })` | The same words in screen space, anchored to a 3D point, with no shear. Use it on a `GRID_AZIMUTH` / `GRID_ELEVATION` figure. |
+| `paletteCss({ id: { top, paper, hi, lo, shades } \| { dark, light } })` | CSS that sets `--anatomy-top`, `--anatomy-paper`, `--anatomy-hi`, `--anatomy-lo` and `--anatomy-shade-0..3` on `[data-palette="id"]`. Pass `dark` and `light` ramps when the figure has both themes. One call replaces a hand-written category stylesheet. |
 | `groupSvg(children, { class, transform, "data-part": … })` | |
 | `figureSvg({ width, height, label, body, standalone: false \| "dark" \| "light", className })` | The `<svg>`. `label` is the accessible description: say what the object is and what it shows. `className` is added to its class, which helps when you stack it under a canvas (`rt-back`, `rp-back`). |
 
 ## 8. Card and page
 | Function | Notes |
 |---|---|
-| `plateHtml({ fig, title, hint, readout, keys: [{ mark, label }], caption, body })` | The card. `mark` is one of `raised`, `flat`, `lit`, `edge`, `dim`, `dotted`, `dashed`, `red`, `green`, `blue`. The readout element carries `data-readout`, so live code writes to it. |
+| `plateHtml({ fig, title, hint, readout, keys: [{ mark, label, html? }], caption, body })` | The card. The legend (`keys` and `caption`) is inside `.iso-plate`, so a capture of the plate includes it. `mark` is one of `raised`, `flat`, `lit`, `edge`, `dim`, `dotted`, `dashed`, `red`, `green`, `blue`. `html` replaces the swatch when a key needs its own mark (trusted markup). The readout carries `data-readout`. Hint and readout share a wrapping footer; under 720px they stack. |
 | `pageHtml({ title, theme = "dark", body, script, width = 650 })` | A standalone document with `ISO_CSS` inlined. |
 | `kitScript()` | From `scripts/inline-kit.mjs`. Prepend it to `script` so the page can call kit functions such as `lineOnTop` and `translateAlong` while animating. |
 | `glScript()` | From `scripts/inline-kit.mjs`. The source of `kit/gl.mjs` (`GLSL_ISO`, `glCamera`, `glLayer`, `smooth`, `burst`, `settle`), to inline after `kitScript()` on a page with a shader: `script: kitScript() + glScript() + live`. It doesn't depend on the kit, so a page whose live code calls no kit function can inline it alone (the Raptor uses `glScript() + LIVE`). Everything is one module script, so live code must not redeclare `smooth`, `burst` or `settle`: a second `const smooth` is a SyntaxError that kills the page. |
@@ -388,7 +391,7 @@ A value for `fixed`, `set` or `draw` can be a number (float), an array of length
 |---|---|
 | `foldLayerHtml({ blocks, formula, labels, state })`, `foldCss()`, `foldLegendHtml(blocks)`, `foldScript(config)` | The on-screen nets, their CSS, the reduced-motion list, and the runtime (`window.__fold.set("folded" \| "unfolded", immediate)`). |
 | `foldSheetDocument({ title, pages, labels })` | An A4 cut-and-fold sheet. Words are 20pt or larger. |
-| `placeCallout(anchor, size, obstacles, bounds, { gap, prefer })`, `calloutHtml(...)`, `calloutRuntime()` | Puts a bubble on the free spot. `calloutRuntime` nudges every `[data-callout]` away from `[data-important]`. |
+| `placeCallout(anchor, size, obstacles, bounds, { gap, prefer })`, `calloutHtml(...)`, `calloutRuntime()` | Puts a bubble on the free spot. A graze under `max(2, 0.5% of the bubble)` does not count. Further rings (2.5× and 4× the gap) are tried before a corner. `leader` is true when the bubble sits more than 1.8 gaps away; the runtime draws `.an-callout-leader` and adds each placed bubble to the obstacles for the next one. The origin is the bubble's `offsetParent`. Type size is `clamp(8px, 1.05cqw, 13px)`. |
 
 A block is `{ id, text, label, slot, role, note, important, key, fill, top, edge, ink, sub, shades }`. `config.slots[slot]` is the viewBox point `[x, y]` the net drops toward.
 

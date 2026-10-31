@@ -1,5 +1,7 @@
 export const AZIMUTH = 45;
 export const ELEVATION = 30;
+export const GRID_AZIMUTH = 86.5;
+export const GRID_ELEVATION = 67;
 export const SHADES = 4;
 const RADIANS = Math.PI / 180;
 const UNIT = Math.sqrt(1.6);
@@ -525,6 +527,31 @@ export function wireSvg(from, to, { via = [], tone = "lo", dotted = false, dashe
 export function faceTextSvg(transform, text, { size = 3, tone = "mid", anchor = "start" } = {}) {
     return `<text class="iso-face-text" data-tone="${tone}" transform="${transform}" font-size="${size}" text-anchor="${anchor}">${escape(text)}</text>`;
 }
+export function flatLabelSvg(point, projection, text, { size = 3, tone = "mid", anchor = "middle", dy = 0, className } = {}) {
+    const [x, y] = iso(point, projection);
+    const cls = className ? `iso-flat-label ${className}` : "iso-flat-label";
+    return `<text class="${cls}" data-tone="${tone}" x="${tenth(x)}" y="${tenth(y + dy)}" font-size="${size}" text-anchor="${anchor}">${escape(text)}</text>`;
+}
+export function paletteCss(palettes = {}) {
+    const decl = (palette) => {
+        if (!palette) return "";
+        const pairs = [["top", palette.top], ["paper", palette.paper], ["face", palette.face], ["hi", palette.hi], ["mid", palette.mid], ["lo", palette.lo], ["dot", palette.dot]];
+        (palette.shades || []).forEach((color, index) => pairs.push([`shade-${index}`, color]));
+        return pairs.filter(([, color]) => color).map(([name, color]) => `--anatomy-${name}:${color}`).join(";");
+    };
+    const rules = [];
+    for (const [name, entry] of Object.entries(palettes)) {
+        const id = String(name).replace(/[^\w-]/g, "");
+        if (!id) continue;
+        const sel = `[data-palette="${id}"]`;
+        const themed = entry.dark || entry.light;
+        const dark = decl(themed ? entry.dark : entry);
+        const light = decl(entry.light);
+        if (dark) rules.push(`${sel}{${dark}}`);
+        if (light) rules.push(`.iso[data-theme="light"] ${sel}{${light}}`);
+    }
+    return rules.join("\n");
+}
 export function groupSvg(children, extra = {}) {
     return `<g${attrs(extra)}>${Array.isArray(children) ? children.join("") : children}</g>`;
 }
@@ -549,10 +576,13 @@ function swatchSvg(mark) {
 }
 export function plateHtml({ fig, title, hint, readout = "", keys = [], caption, body }) {
     const corner = (name, text, extra = "") => `<span class="iso-plate-corner" data-corner="${name}"${extra}>${escape(text)}</span>`;
+    const keyHtml = (key) => `<span class="iso-key">${key.html || swatchSvg(key.mark)}${escape(key.label)}</span>`;
     const legend = keys.length || caption
-        ? `<figcaption class="iso-legend">${keys.length ? `<span class="iso-keys">${keys.map((key) => `<span class="iso-key">${swatchSvg(key.mark)}${escape(key.label)}</span>`).join("")}</span>` : ""}${caption ? `<span class="iso-caption">${escape(caption)}</span>` : ""}</figcaption>`
+        ? `<figcaption class="iso-legend">${keys.length ? `<span class="iso-keys">${keys.map(keyHtml).join("")}</span>` : ""}${caption ? `<span class="iso-caption">${escape(caption)}</span>` : ""}</figcaption>`
         : "";
-    return `<figure class="iso-figure"><div class="iso-plate"><div class="iso-plate-corners" aria-hidden="true">${corner("fig", fig)}${title ? corner("title", title) : ""}${hint ? corner("hint", hint) : ""}${corner("readout", readout, " data-readout")}</div>${body}</div>${legend}</figure>`;
+    const top = `<div class="iso-plate-corners" data-edge="top" aria-hidden="true">${corner("fig", fig)}${title ? corner("title", title) : ""}</div>`;
+    const bottom = `<div class="iso-plate-corners" data-edge="bottom" aria-hidden="true">${hint ? corner("hint", hint) : ""}${corner("readout", readout, " data-readout")}</div>`;
+    return `<figure class="iso-figure"><div class="iso-plate">${top}${body}${legend}${bottom}</div></figure>`;
 }
 export function pageHtml({ title, theme = "dark", body, script = "", width = 650 }) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)}</title><style>${ISO_CSS}${PAGE_CSS.replace("__WIDTH__", String(width))}</style></head><body class="iso" data-theme="${theme}"><main class="iso-page">${body}</main>${script ? `<script type="module">${script.replace(/<\/(script)/gi, "<\\/$1")}</script>` : ""}</body></html>`;
@@ -635,6 +665,11 @@ export const ISO_CSS = `
 .iso-face-text[data-tone="hi"]{fill:var(--anatomy-hi)}
 .iso-face-text[data-tone="lo"]{fill:var(--anatomy-lo)}
 .iso-face-text[data-tone="faint"]{fill:var(--anatomy-faint)}
+.iso-flat-label{fill:var(--anatomy-strong);font-family:ui-sans-serif,system-ui,sans-serif;font-weight:700}
+.iso-flat-label[data-tone="mid"]{fill:var(--anatomy-mid)}
+.iso-flat-label[data-tone="hi"]{fill:var(--anatomy-hi)}
+.iso-flat-label[data-tone="lo"]{fill:var(--anatomy-lo)}
+.iso-flat-label[data-tone="faint"]{fill:var(--anatomy-faint)}
 .tb-body{fill:var(--anatomy-shade-2);stroke:none}
 .tb-shine{fill:var(--anatomy-top);stroke:none}
 .tb-shade{fill:var(--anatomy-shade-0);stroke:none}
@@ -647,13 +682,15 @@ export const ISO_CSS = `
 .iso-line[data-flow]{animation:iso-flow 1600ms linear infinite}
 .iso-dots circle[data-pulse]{animation:iso-pulse 1600ms steps(1,end) infinite;animation-delay:var(--pulse-at,0ms)}
 .iso-figure{margin:32px 0 36px}
-.iso-plate{position:relative;padding:52px 24px;border-radius:0;background:var(--anatomy-card);box-shadow:0 0 0 1px var(--anatomy-mid);--anatomy-paper:var(--anatomy-card)}
-.iso-plate-corners{position:absolute;inset:18px 20px;pointer-events:none}
-.iso-plate-corner{position:absolute;color:var(--anatomy-muted);font-family:var(--anatomy-mono);font-size:10.5px;line-height:1;letter-spacing:.04em;white-space:nowrap}
-.iso-plate-corner[data-corner="fig"]{top:0;left:0;color:var(--anatomy-text)}
-.iso-plate-corner[data-corner="title"]{top:0;right:0;text-transform:uppercase;letter-spacing:.1em}
-.iso-plate-corner[data-corner="hint"]{bottom:0;left:0;text-transform:uppercase;letter-spacing:.1em}
-.iso-plate-corner[data-corner="readout"]{right:0;bottom:0;color:var(--anatomy-text);font-variant-numeric:tabular-nums}
+.iso-plate{position:relative;padding:52px 24px;border-radius:0;background:var(--anatomy-card);box-shadow:0 0 0 1px var(--anatomy-mid);--anatomy-paper:var(--anatomy-card);container-type:inline-size}
+.iso-plate-corners{position:absolute;left:20px;right:20px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px 16px;pointer-events:none}
+.iso-plate-corners[data-edge="top"]{top:18px}
+.iso-plate-corners[data-edge="bottom"]{bottom:18px;align-items:flex-end;flex-wrap:wrap}
+.iso-plate-corner{position:static;min-width:0;color:var(--anatomy-muted);font-family:var(--anatomy-mono);font-size:10.5px;line-height:1.35;letter-spacing:.04em;white-space:nowrap;max-width:100%}
+.iso-plate-corner[data-corner="fig"]{color:var(--anatomy-text)}
+.iso-plate-corner[data-corner="title"]{margin-left:auto;text-align:right;text-transform:uppercase;letter-spacing:.1em}
+.iso-plate-corner[data-corner="hint"]{text-transform:uppercase;letter-spacing:.1em}
+.iso-plate-corner[data-corner="readout"]{margin-left:auto;flex:1 1 10em;color:var(--anatomy-text);font-variant-numeric:tabular-nums;text-align:right;white-space:normal;overflow-wrap:anywhere}
 .iso-plate .iso-svg{margin:0 auto}
 .iso-legend{display:grid;gap:8px;margin-top:12px;color:var(--anatomy-muted);font-size:13px;line-height:1.55}
 .iso-keys{display:flex;flex-wrap:wrap;gap:6px 18px}
@@ -669,6 +706,6 @@ export const ISO_CSS = `
 .iso-swatch[data-mark="green"] path{stroke:var(--anatomy-green)}
 .iso-swatch[data-mark="blue"] path{stroke:var(--anatomy-blue)}
 .iso-swatch-crease{stroke:var(--anatomy-lo)!important}
-@media (max-width:560px){.iso-plate{padding:48px 12px 70px}.iso-plate-corner[data-corner="hint"]{bottom:18px}}
+@media (max-width:720px){.iso-plate{padding:48px 12px 18px}.iso-plate-corners[data-edge="bottom"]{position:static;margin-top:10px}.iso-plate-corner[data-corner="hint"],.iso-plate-corner[data-corner="readout"]{flex:1 1 100%;margin-left:0;text-align:left;white-space:normal}}
 @media (prefers-reduced-motion:reduce){.iso-line[data-flow],.iso-dots circle[data-pulse]{animation:none}}
 `;

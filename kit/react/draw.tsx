@@ -162,10 +162,26 @@ interface PlateProps {
 }
 
 export function Plate({ fig, title, hint, readout, keys = [], caption, children }: PlateProps) {
+  const legend =
+    keys.length || caption ? (
+      <figcaption className="iso-legend">
+        {keys.length ? (
+          <span className="iso-keys">
+            {keys.map((key) => (
+              <span className="iso-key" key={key.label}>
+                <Swatch mark={key.mark} />
+                {key.label}
+              </span>
+            ))}
+          </span>
+        ) : null}
+        {caption ? <span className="iso-caption">{caption}</span> : null}
+      </figcaption>
+    ) : null;
   return (
     <figure className="iso-figure">
       <div className="iso-plate">
-        <div className="iso-plate-corners" aria-hidden="true">
+        <div className="iso-plate-corners" data-edge="top" aria-hidden="true">
           <span className="iso-plate-corner" data-corner="fig">
             {fig}
           </span>
@@ -174,6 +190,10 @@ export function Plate({ fig, title, hint, readout, keys = [], caption, children 
               {title}
             </span>
           ) : null}
+        </div>
+        {children}
+        {legend}
+        <div className="iso-plate-corners" data-edge="bottom" aria-hidden="true">
           {hint ? (
             <span className="iso-plate-corner" data-corner="hint">
               {hint}
@@ -183,23 +203,7 @@ export function Plate({ fig, title, hint, readout, keys = [], caption, children 
             {readout}
           </span>
         </div>
-        {children}
       </div>
-      {keys.length || caption ? (
-        <figcaption className="iso-legend">
-          {keys.length ? (
-            <span className="iso-keys">
-              {keys.map((key) => (
-                <span className="iso-key" key={key.label}>
-                  <Swatch mark={key.mark} />
-                  {key.label}
-                </span>
-              ))}
-            </span>
-          ) : null}
-          {caption ? <span className="iso-caption">{caption}</span> : null}
-        </figcaption>
-      ) : null}
     </figure>
   );
 }
