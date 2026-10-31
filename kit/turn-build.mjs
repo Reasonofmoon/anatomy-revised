@@ -4,13 +4,15 @@ import * as G from "./lathe.mjs";
 import * as A from "./audit.mjs";
 
 const TAU = Math.PI * 2;
+const roundScaled = (scaled, band) => {
+  const half = Math.round(scaled * 2) / 2;
+  const snapped = Math.abs(half % 1) > 0.25 && Math.abs(scaled - half) < band ? half : scaled;
+  return Math.round(snapped);
+};
 const roundDigits = (digits) => (value) => {
   if (!Number.isFinite(value)) return value;
   const scale = 10 ** digits;
-  const sign = value < 0 ? -1 : 1;
-  const abs = Math.abs(value);
-  const nudged = abs + Math.max(abs, 1) * 1e-12;
-  return sign * (Math.round(nudged * scale) / scale);
+  return roundScaled(value * scale, 0.49) / scale;
 };
 const r4 = roundDigits(4);
 const r3 = roundDigits(3);
@@ -28,7 +30,7 @@ function octOf(n) {
     x = ox;
     y = oy;
   }
-  return [Math.round((x * 0.5 + 0.5) * 65535 + 1e-9), Math.round((y * 0.5 + 0.5) * 65535 + 1e-9)];
+  return [roundScaled((x * 0.5 + 0.5) * 65535, 8), roundScaled((y * 0.5 + 0.5) * 65535, 8)];
 }
 
 function packPairs(byLayer, stride, grouped) {
