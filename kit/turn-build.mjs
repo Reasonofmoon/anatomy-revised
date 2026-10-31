@@ -4,8 +4,16 @@ import * as G from "./lathe.mjs";
 import * as A from "./audit.mjs";
 
 const TAU = Math.PI * 2;
-const r4 = (v) => Math.round(v * 1e4) / 1e4;
-const r3 = (v) => Math.round(v * 1e3) / 1e3;
+const roundDigits = (digits) => (value) => {
+  if (!Number.isFinite(value)) return value;
+  const scale = 10 ** digits;
+  const sign = value < 0 ? -1 : 1;
+  const abs = Math.abs(value);
+  const nudged = abs + Math.max(abs, 1) * 1e-12;
+  return sign * (Math.round(nudged * scale) / scale);
+};
+const r4 = roundDigits(4);
+const r3 = roundDigits(3);
 const pack3 = (value) => JSON.parse(JSON.stringify(value, (key, v) => (typeof v === "number" ? r3(v) : v instanceof Float64Array || v instanceof Float32Array ? Array.from(v, r3) : v)));
 const pack = (value) => JSON.parse(JSON.stringify(value, (key, v) => (typeof v === "number" ? r4(v) : v instanceof Float64Array || v instanceof Float32Array ? Array.from(v, r4) : v)));
 const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -20,7 +28,7 @@ function octOf(n) {
     x = ox;
     y = oy;
   }
-  return [Math.round((x * 0.5 + 0.5) * 65535), Math.round((y * 0.5 + 0.5) * 65535)];
+  return [Math.round((x * 0.5 + 0.5) * 65535 + 1e-9), Math.round((y * 0.5 + 0.5) * 65535 + 1e-9)];
 }
 
 function packPairs(byLayer, stride, grouped) {

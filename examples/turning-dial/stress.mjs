@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as k from "../../kit/iso-kit.mjs";
+import { stableJson } from "../../kit/stable-json.mjs";
 import * as G from "../../kit/lathe.mjs";
 import * as A from "../../kit/audit.mjs";
 import { tubePieces, tubeSvg } from "../../kit/tube.mjs";
@@ -224,7 +225,7 @@ const BACK = [`<path class="iso-halo" d="${k.haloOf(BENCH, BENCH_TOP - 6, 6, P)}
 const backSvg = k.figureSvg({ width: WIDTH, height: HEIGHT, label: "A dense robot hand on a turntable in a workshop: a stress scene for the 3D mode.", body: BACK });
 const staticSvg = (list) => `<svg xmlns="http://www.w3.org/2000/svg" class="iso-svg iso-layer" viewBox="0 0 ${WIDTH} ${HEIGHT}" aria-hidden="true">${list.join("")}</svg>`;
 const stage = `<div class="iso-stage iso-turn ts-stage" tabindex="0" role="img" aria-label="A dense robot hand turning on a turntable">${backSvg}${out.layerSvg("hand", { width: WIDTH, height: HEIGHT })}${staticSvg(layerOf("front"))}</div>`;
-const LIVE = `const DATA = ${JSON.stringify(out.data)};
+const LIVE = `const DATA = ${stableJson(out.data)};
 const follow = ${follow.toString()};
 const stage = document.querySelector(".ts-stage");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
@@ -259,7 +260,7 @@ new IntersectionObserver((entries) => {
 }).observe(stage);
 `;
 const body = k.plateHtml({ fig: "Fig 3D·S", title: "Stress hand", hint: "Tour only", readout: `${out.report.parts} live parts`, caption: "A stress scene for the 3D mode: a dense hand of hinge chains on a turntable among static workshop clutter.", body: `<style>${out.css}\n.ts-stage{outline:none}</style>${stage}` });
-const page = k.pageHtml({ title: "Stress hand", theme, body, script: turnScript() + (out.verify ? `window.__isoVerify = ${JSON.stringify(out.verify)};\n` : "") + LIVE, width: WIDTH + 40 });
+const page = k.pageHtml({ title: "Stress hand", theme, body, script: turnScript() + (out.verify ? `window.__isoVerify = ${stableJson(out.verify)};\n` : "") + LIVE, width: WIDTH + 40 });
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const name = `turning-stress${out.verify ? "-verify" : ""}${theme === "light" ? "-light" : ""}.html`;
   writeFileSync(join(HERE, name), page);

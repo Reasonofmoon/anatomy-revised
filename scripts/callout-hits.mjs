@@ -8,12 +8,25 @@ function calloutHits({ callout = "[data-callout]", important = "[data-important]
     return w * h;
   };
   const shown = (el) => {
+    let alpha = 1;
     for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
       const style = getComputedStyle(node);
-      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+      if (style.display === "none" || style.visibility === "hidden") return null;
+      alpha *= Number(style.opacity);
+      if (!(alpha >= 0.35)) return null;
     }
     const rect = el.getBoundingClientRect();
-    return rect.width >= 1 && rect.height >= 1 ? rect : null;
+    if (rect.width < 1 || rect.height < 1) return null;
+    let top = rect.top, left = rect.left, right = rect.right, bottom = rect.bottom;
+    for (const child of el.querySelectorAll ? el.querySelectorAll(".fn-flap, .fn-glue") : []) {
+      const box = child.getBoundingClientRect();
+      if (box.width < 0.5 || box.height < 0.5) continue;
+      top = Math.min(top, box.top);
+      left = Math.min(left, box.left);
+      right = Math.max(right, box.right);
+      bottom = Math.max(bottom, box.bottom);
+    }
+    return { top, left, right, bottom, width: right - left, height: bottom - top };
   };
   const nameOf = (el, attr) => el.getAttribute(attr) || (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 32) || el.tagName;
   const marks = [...document.querySelectorAll(important)].map((el) => ({ el, rect: shown(el), name: nameOf(el, "data-important") })).filter((mark) => mark.rect);

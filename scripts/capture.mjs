@@ -1,7 +1,7 @@
-import { chromePort } from "./chrome-port.mjs";
+import { chromePort, killChrome, removeProfile } from "./chrome-port.mjs";
 import { LEGIBLE_TEXT, reportLegible } from "./legible-text.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,8 +16,9 @@ if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experiment
 function usage() {
   console.log(`Capture a figure with headless Chrome.
 
-  node capture.mjs <file.html | file.svg | url> [options]
+  node capture.mjs <file.html | file.svg | url> [out.png] [options]
 
+  out.png             output path. Same as --out. A second path is an error.
   --out <png>         output path (default: capture.png in the current directory)
   --width <px>        viewport width (default 1440; use 390 for a phone)
   --height <px>       viewport height (default 1000)
@@ -60,10 +61,16 @@ function parse(argv) {
     else rest.push(arg);
   }
   options.target = rest[0];
+  if (rest.length > 2) options.extra = true;
+  else if (rest[1]) options.positionalOut = rest[1];
   return options;
 }
 
 function problemWith(options) {
+  if (options.extra) return "only one page and one output path";
+  if (options.positionalOut?.startsWith("-")) return `unknown option ${options.positionalOut}`;
+  if (options.positionalOut && options.out) return "pass the output path either as the second argument or with --out";
+  if (options.positionalOut) options.out = options.positionalOut;
   const positive = (value) => Number.isFinite(value) && value > 0;
   const numbers = (list, count) => list.length === count && list.every(Number.isFinite);
   for (const name of ["width", "height", "scale", "zoomScale"]) if (!positive(options[name])) return `--${name === "zoomScale" ? "zoom-scale" : name} needs a number above 0`;
@@ -138,10 +145,8 @@ async function main() {
   ]);
   const port = await chromePort(chrome, profile);
   const finish = (code) => {
-    chrome.kill("SIGKILL");
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {}
+    killChrome(chrome, profile);
+    removeProfile(profile);
     process.exit(code);
   };
   try {
@@ -182,8 +187,7 @@ async function main() {
     const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
     await send("Runtime.enable");
     await send("Page.enable");
-    const features = [];
-    if (options.reduced) features.push({ name: "prefers-reduced-motion", value: "reduce" });
+    const features = [{ name: "prefers-reduced-motion", value: options.reduced ? "reduce" : "no-preference" }];
     if (options.theme) features.push({ name: "prefers-color-scheme", value: options.theme });
     if (features.length) await send("Emulation.setEmulatedMedia", { features });
     await send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: options.scale, mobile: options.width < 600 });

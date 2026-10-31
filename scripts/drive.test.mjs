@@ -46,10 +46,10 @@ test("drive preserves a successful JSON evaluation", async () => {
   assert.match(result.stdout, /console: clean/);
 });
 
-test("drive preserves a successful undefined evaluation", async () => {
+test("drive omits an undefined evaluation instead of printing eval: undefined", async () => {
   const result = await drive("void 0");
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /eval: undefined/);
+  assert.doesNotMatch(result.stdout, /eval:/);
   assert.match(result.stdout, /console: clean/);
 });
 

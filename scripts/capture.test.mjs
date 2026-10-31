@@ -41,6 +41,27 @@ test("capture retains existing-directory output", async () => {
   }
 });
 
+test("capture writes a second positional path and rejects a third", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anatomy-capture-"));
+  try {
+    const page = join(directory, "figure.html");
+    const output = join(directory, "shot.png");
+    await writeFile(page, '<!doctype html><div class="iso-plate" style="width:80px;height:40px;background:#eee">Figure</div>');
+    await execute(process.execPath, [capture, page, output, "--wait", "0", "--scale", "1"], { timeout: 30000, cwd: directory });
+    assert.ok((await readFile(output)).length > 100);
+    const stray = await readFile(join(directory, "capture.png")).then(() => true, () => false);
+    assert.equal(stray, false);
+    const both = await execute(process.execPath, [capture, page, output, "--out", join(directory, "other.png"), "--wait", "0"], { timeout: 30000 }).then(() => null, (failure) => failure);
+    assert.equal(both?.code, 1);
+    assert.match(both.stderr, /second argument or with --out/);
+    const extra = await execute(process.execPath, [capture, page, output, join(directory, "again.png"), "--wait", "0"], { timeout: 30000 }).then(() => null, (failure) => failure);
+    assert.equal(extra?.code, 1);
+    assert.match(extra.stderr, /only one page and one output path/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("capture rejects option values that would be ignored or break the clip", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anatomy-capture-"));
   try {

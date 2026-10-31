@@ -8,7 +8,7 @@ if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
   console.log(`Check that every texture line in a figure ends on something.
 
   node lines.mjs <file.html | url> [--out marks.png] [--tolerance 1] [--select css] [--wait 1500]
-                       [--eval js] [--eval-file hook.js] [--allow-empty] [drive.mjs flags]
+                       [--eval js] [--eval-file hook.js] [--state folded|unfolded] [--allow-empty] [drive.mjs flags]
 
 Every open subpath of every .iso-line (seams, grooves, ribs, rule lines, ticks, needles) must end on another stroke,
 a dot or an outline within the tolerance (viewBox px), or under a fill painted after it. A short straight mark (a tick)
@@ -18,9 +18,12 @@ tip, rule lines standing for printed text). Exits 1 if any end floats, or if it 
 saw nothing is not a pass). --allow-empty turns that empty result into a warning. --out writes the card with each
 floating end ringed.
 
---eval js and --eval-file hook.js run in the page before the check, so a folded or unfolded state can be selected
-(window.__fold.set("folded", true)). Repeat --eval for more than one hook. The same run also measures teaching text
-(data-legible) and fails when a data-callout covers a data-important part.`);
+--state folded or --state unfolded calls window.__fold.set(state, true) first, then waits, so the opacity change is
+already applied when the check runs. --state unfolded does not fail on lines: EMPTY: the drawing is dimmed on purpose,
+and the run measures teaching text and callouts instead. --eval js and --eval-file hook.js run after that wait. An
+eval should return JSON (window.__fold.set returns the state, or a promise of it when the fold animates). Repeat
+--eval for more than one hook. The same run also measures teaching text (data-legible) and fails when a data-callout
+covers a data-important part.`);
   process.exit(argv.length ? 0 : 1);
 }
 const take = (flag, fallback) => {
@@ -37,6 +40,11 @@ const wait = Number(take("--wait", 1500));
 const allowAt = argv.indexOf("--allow-empty");
 const allowEmpty = allowAt >= 0;
 if (allowEmpty) argv.splice(allowAt, 1);
+const state = take("--state", null);
+if (state != null && state !== "folded" && state !== "unfolded") {
+  console.error("lines: --state must be folded or unfolded");
+  process.exit(1);
+}
 const evals = [];
 for (const flag of ["--eval", "--eval-file"]) {
   let at = argv.indexOf(flag);
@@ -51,6 +59,7 @@ for (const flag of ["--eval", "--eval-file"]) {
     at = argv.indexOf(flag);
   }
 }
-const actions = JSON.stringify([["wait", wait], ...evals.map((code) => ["eval", code]), ["lines", out, select, { tolerance, allowEmpty }]]);
+const lead = state ? [["eval", `window.__fold && window.__fold.set(${JSON.stringify(state)}, true)`]] : [];
+const actions = JSON.stringify([...lead, ["wait", wait], ...evals.map((code) => ["eval", code]), ["lines", out, select, { tolerance, allowEmpty, unfolded: state === "unfolded" }]]);
 const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "drive.mjs"), argv[0], actions, ...argv.slice(1)], { stdio: "inherit" });
 child.on("exit", (code) => process.exit(code ?? 1));

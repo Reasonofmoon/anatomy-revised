@@ -1,6 +1,32 @@
-import { rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
+
+export function removeProfile(profile) {
+  if (!profile) return;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      rmSync(profile, { recursive: true, force: true });
+    } catch { /* chrome can still be creating files while the directory is removed */ }
+    if (!existsSync(profile)) return;
+    spawnSync("sleep", ["0.05"]);
+  }
+}
+
+export function killChrome(chrome, profile) {
+  if (chrome?.pid && process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(chrome.pid), "/t", "/f"], { stdio: "ignore" });
+  } else if (chrome) {
+    try { if (chrome.pid) process.kill(-chrome.pid, "SIGKILL"); } catch { /* not a process-group leader */ }
+    try { chrome.kill("SIGKILL"); } catch { /* already gone */ }
+  }
+  if (profile && process.platform !== "win32") spawnSync("pkill", ["-KILL", "-f", `user-data-dir=${profile}`], { stdio: "ignore" });
+}
 
 export async function chromePort(chrome, profile) {
+  if (chrome.exitCode != null || chrome.signalCode) {
+    killChrome(chrome, profile);
+    throw new Error(`Chrome exited before startup: ${chrome.exitCode ?? chrome.signalCode}`);
+  }
   try {
     return await new Promise((done, fail) => {
       let text = "";
@@ -29,8 +55,8 @@ export async function chromePort(chrome, profile) {
       chrome.on("exit", exited);
     });
   } catch (error) {
-    chrome.kill("SIGKILL");
-    rmSync(profile, { recursive: true, force: true });
+    killChrome(chrome, profile);
+    removeProfile(profile);
     throw error;
   }
 }
