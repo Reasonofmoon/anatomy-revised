@@ -14,6 +14,8 @@ node scripts/print.mjs sheet.mjs --letter --landscape                   # Letter
 
 It writes `<out>-<format>-a4.pdf` and `.html` next to the spec (`-letter` with `--letter`, `-a4-landscape` or `-letter-landscape` with `--landscape`), plus a preview `.png` with `--png`. It exits 1 when a format runs past its page count. The three formats are poster, drawing and detailed. `PAPER.a4Landscape` and `PAPER.letterLandscape` are the same sizes for a sheet built by hand.
 
+On a landscape poster the figure is fit on both axes into the row that remains after the mast, the question, the legend and the footer. A wide crop no longer stretches to the full content width: that made an A4 landscape figure about 189mm tall inside an 182mm printable height and cut off the legend, the description and the footer. The printable area is the page inside the 16mm side and top padding and the 12mm bottom padding.
+
 Chrome's `--print-to-pdf` flag hangs on Linux, so `print.mjs` prints with `Page.printToPDF` there and does not wait out the flag (set `ANATOMY_PRINT_FORCE_CLI=1` to try it). Elsewhere the flag is killed after `ANATOMY_PRINT_TIMEOUT_MS` (default 20 seconds) and the same HTML is printed with `Page.printToPDF`, which has its own `ANATOMY_PRINT_FALLBACK_TIMEOUT_MS` (default 20 seconds). Lowering the first timeout does not shorten the fallback. The log says `via --print-to-pdf` or `via Page.printToPDF`. If both fail, the script prints both reasons, says when the HTML was written, and exits. It does not dump a stack trace. Pose capture through `drive.mjs` is killed after 120 seconds, Chrome included: the browser runs in that process group, and the `/tmp/iso-drive-*` profile is removed. `node scripts/drive.mjs --clean-profiles` deletes leftover `iso-drive-*`, `iso-capture-*`, `iso-print-*` and `iso-cdp-pdf-*` directories that are older than `ANATOMY_PROFILE_STALE_MS` (default 120 seconds) and not open in a live Chrome. A young profile, or one a concurrent run is using, is left alone.
 
 An `eval` action should return JSON. `window.__fold.set` returns the state it landed on (a promise, if the fold is still animating). A hook that returns `undefined` is ignored, not parsed.
@@ -69,8 +71,24 @@ export default {
 
 1. Build the light page first (`node build.mjs --light`).
 2. Run with `--format all --png` and read every PNG. Look for pins on empty space, a close-up that shows the wrong part, a lit part hidden behind another, and text cut at the foot of the page.
-3. Zoom into the PDF or the HTML at 4× (`drive.mjs` `["shot", out, ".ps", 4, [x, y, w, h]]` on `<name>.html?print`): lines must be vector and crisp, and the lit parts must stand out at the size of a step still.
+3. Zoom into the PDF or the HTML at 4× (`drive.mjs` `["shot", out, ".ps", 4, [x, y, w, h]]` on `<name>.html?print`): lines must be vector and crisp, and the lit parts must stand out at the size of a step still. On a landscape poster, the mast, the figure, the question, the legend and the footer all sit inside the padded page.
 4. Print one page if you can. Light-grey dims and hairlines must still read on an office laser printer.
+
+## Fonts in the PDF
+
+`kit/print-fonts.mjs` registers three families and sets `font-synthesis: none`.
+
+| Family | What it is for | `src: local()` |
+|---|---|---|
+| Anatomy Hangul | Korean, and Latin when NanumGothic is the file Chrome opens | NanumGothic at 400 and 500, NanumGothicBold at 700 |
+| Anatomy Latin | Latin when no Korean file is installed, including pin numbers and SVG `<text>` in the sheet | `NotoSans-Regular` / `Arimo-Regular` / Liberation Sans at 400 and 500, the bold files at 700 |
+| Anatomy Mono | Labels set in the mono stack | `NotoSansMono-Regular`, Liberation Mono |
+
+Weight 500 points at the regular file. A medium request then uses that outline.
+
+Chrome embeds the opened file as CID TrueType when it is a static TrueType (glyf outlines) and its OS/2 embedding bits allow a subset. It emits Type 3, and this repo cannot force CID, when the file Chrome actually opens is a variable font, a CFF OpenType, a collection it will not split, or a face whose fsType forbids embedding. A generic `Arial` or `sans-serif` that misses every `local()` also becomes Type 3 on Chrome builds that will not subset the fontconfig fallback (`NotoSans-Regular` or `Arimo-Regular`). The sheet names those files in `src: local()` so that path is not the one Chrome takes.
+
+A `<use>` clone does not see a font rule on the sheet. The capture writes `font-family="Anatomy Latin, Anatomy Hangul, sans-serif"` onto each `<text>` and `<tspan>`, and snaps the weight to 400 or 700, so a raw `Arial` or `sans-serif` on a periodic-table label does not fall through to Arimo or Noto as a system face.
 
 ## A PDF link on the figure
 

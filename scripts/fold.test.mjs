@@ -85,5 +85,17 @@ test("cut-and-fold sheet keeps words at the print minimum", () => {
   assert.equal((doubled.match(/자르기\./g) || []).length, 1);
   assert.match(doubled, /<b>자르기\.<\/b> 실선을 따라 자른다/);
   assert.doesNotMatch(doubled, /자르기\. 자르기\./);
+  const mid = foldSheetDocument({
+    title: "문장",
+    labels: { cutMark: "자르기.", cut: "실선을 따라 자르기. 자른다", foldMark: "접기.", fold: "힌지 접기. 안으로", glueMark: "풀칠.", glue: "탭에 풀칠. 한다" },
+    pages: [{ bands: [{ blocks: [block] }] }],
+  });
+  assert.equal((mid.match(/자르기\./g) || []).length, 1);
+  assert.equal((mid.match(/접기\./g) || []).length, 1);
+  assert.equal((mid.match(/풀칠\./g) || []).length, 1);
+  assert.match(mid, /<b>자르기\.<\/b> 실선을 따라 자른다/);
+  assert.match(mid, /<b>접기\.<\/b> 힌지 안으로/);
+  assert.match(mid, /<b>풀칠\.<\/b> 탭에 한다/);
+  assert.doesNotMatch(mid, /따라 자르기/);
   assert.match(korean, /line-height:1\.05/);
 });
