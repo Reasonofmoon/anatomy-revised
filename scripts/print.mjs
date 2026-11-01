@@ -112,8 +112,14 @@ export function captureScript(spec) {
     walkLive.forEach((el, at) => {
       const id = live.get(el);
       const paint = paintedStyle(el, id);
-      if (!id && !paint) return;
       const target = walkClone[at];
+      // A <use> clone does not see the sheet's font rule, so the face is stored on the text.
+      if (el.localName === "text" || el.localName === "tspan") {
+        const weight = Math.round(parseFloat(getComputedStyle(el).fontWeight) || 400);
+        target.setAttribute("font-family", "Anatomy Latin, Anatomy Hangul, sans-serif");
+        target.setAttribute("font-weight", weight >= 650 ? "700" : "400");
+      }
+      if (!id && !paint) return;
       const own = target.getAttribute("style");
       let extra = paint;
       if (id) {

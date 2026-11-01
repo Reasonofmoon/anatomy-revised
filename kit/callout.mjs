@@ -21,7 +21,29 @@ export function rectGap(a, b) {
 }
 
 export function needsLeader(anchor, box, gap = 10) {
-  return rectGap(anchor, box) > 1.8 * gap;
+  return rectGap(anchor, box) > gap;
+}
+
+export function segmentHitsRect(x1, y1, x2, y2, rect) {
+  const left = rect.x;
+  const right = rect.x + rect.w;
+  const top = rect.y;
+  const bottom = rect.y + rect.h;
+  const inside = (x, y) => x >= left && x <= right && y >= top && y <= bottom;
+  if (inside(x1, y1) || inside(x2, y2)) return true;
+  const crosses = (ax, ay, bx, by, cx, cy, dx, dy) => {
+    const ab = (px, py) => (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    const cd = (px, py) => (dx - cx) * (py - cy) - (dy - cy) * (px - cx);
+    const d1 = ab(cx, cy);
+    const d2 = ab(dx, dy);
+    const d3 = cd(ax, ay);
+    const d4 = cd(bx, by);
+    return d1 * d2 < 0 && d3 * d4 < 0;
+  };
+  return crosses(x1, y1, x2, y2, left, top, right, top)
+    || crosses(x1, y1, x2, y2, right, top, right, bottom)
+    || crosses(x1, y1, x2, y2, right, bottom, left, bottom)
+    || crosses(x1, y1, x2, y2, left, bottom, left, top);
 }
 
 export function leaderEnds(anchor, box) {
@@ -32,7 +54,7 @@ export function leaderEnds(anchor, box) {
   return { x1: x, y1: y, x2: ax, y2: ay };
 }
 
-export function placeCallout(anchor, size, obstacles = [], bounds = null, { gap = 10, prefer = "above" } = {}) {
+export function placeCallout(anchor, size, obstacles = [], bounds = null, { gap = 10, prefer = "above", target = null, callouts = [] } = {}) {
   const FAMILIES = ["above", "below", "right", "left", "above-right", "above-left", "below-right", "below-left"];
   const spotOf = (name, ax, ay, aw, ah, box, distance) => {
     const sw = box.w;
@@ -52,25 +74,38 @@ export function placeCallout(anchor, size, obstacles = [], bounds = null, { gap 
   const ay = anchor.y;
   const aw = anchor.w;
   const ah = anchor.h;
-  const rings = [gap, gap * 2.5, gap * 4];
+  const aim = target || anchor;
   const graze = Math.max(2, size.w * size.h * 0.005);
+  const reach = bounds ? Math.max(bounds.w, bounds.h) : Math.max(size.w, size.h) + gap * 8;
+  const steps = Math.max(1, Math.ceil(reach / gap));
+  const along = Math.max(gap, Math.round(Math.min(size.w, size.h) / 2));
   const order = [];
-  rings.forEach((distance, ring) => {
+  for (let step = 1; step <= steps; step++) {
+    const distance = gap * step;
     const names = [prefer, ...FAMILIES];
     const seen = new Set();
     for (const name of names) {
       if (!name || seen.has(name) || !FAMILIES.includes(name)) continue;
       seen.add(name);
-      order.push({ name, distance, ring });
+      order.push({ name, distance });
     }
-  });
+    const span = Math.max(aw, size.w);
+    for (let shift = -span; shift <= span; shift += along) {
+      if (!shift) continue;
+      order.push({ name: "along-above", x: ax + aw / 2 - size.w / 2 + shift, y: ay - size.h - distance });
+      order.push({ name: "along-below", x: ax + aw / 2 - size.w / 2 + shift, y: ay + ah + distance });
+      order.push({ name: "along-left", x: ax - size.w - distance, y: ay + ah / 2 - size.h / 2 + shift });
+      order.push({ name: "along-right", x: ax + aw + distance, y: ay + ah / 2 - size.h / 2 + shift });
+    }
+  }
   if (bounds) {
-    order.push({ name: "bounds-tl", x: bounds.x + gap, y: bounds.y + gap, ring: rings.length });
-    order.push({ name: "bounds-tr", x: bounds.x + bounds.w - size.w - gap, y: bounds.y + gap, ring: rings.length });
-    order.push({ name: "bounds-bl", x: bounds.x + gap, y: bounds.y + bounds.h - size.h - gap, ring: rings.length });
-    order.push({ name: "bounds-br", x: bounds.x + bounds.w - size.w - gap, y: bounds.y + bounds.h - size.h - gap, ring: rings.length });
+    order.push({ name: "bounds-tl", x: bounds.x + gap, y: bounds.y + gap });
+    order.push({ name: "bounds-tr", x: bounds.x + bounds.w - size.w - gap, y: bounds.y + gap });
+    order.push({ name: "bounds-bl", x: bounds.x + gap, y: bounds.y + bounds.h - size.h - gap });
+    order.push({ name: "bounds-br", x: bounds.x + bounds.w - size.w - gap, y: bounds.y + bounds.h - size.h - gap });
   }
   let best = null;
+  const placed = new Set();
   for (const item of order) {
     const spot = item.x === undefined ? spotOf(item.name, ax, ay, aw, ah, size, item.distance) : item;
     if (!spot) continue;
@@ -82,6 +117,9 @@ export function placeCallout(anchor, size, obstacles = [], bounds = null, { gap 
       x = clamp(x, bounds.x, maxX);
       y = clamp(y, bounds.y, maxY);
     }
+    const key = `${Math.round(x)}:${Math.round(y)}`;
+    if (placed.has(key)) continue;
+    placed.add(key);
     const box = { x, y, w: size.w, h: size.h };
     let area = 0;
     let ratio = 0;
@@ -91,14 +129,19 @@ export function placeCallout(anchor, size, obstacles = [], bounds = null, { gap 
       ratio = Math.max(ratio, coverageRatio(box, obstacle));
     }
     const scored = area <= graze ? 0 : area;
-    const rank = scored * 1000 + item.ring * 20 + (item.name === prefer ? 0 : 5) + (area > 0.01 ? 0.5 : 0);
-    if (!best || rank < best.rank - 1e-6) best = { x, y, area, ratio, place: item.name, rank };
+    const ends = leaderEnds(aim, box);
+    let crosses = 0;
+    for (const other of callouts) if (segmentHitsRect(ends.x1, ends.y1, ends.x2, ends.y2, other)) crosses = 1;
+    const dist = rectGap(aim, box);
+    const corner = item.name.startsWith("bounds-") ? 240 : 0;
+    const rank = (scored > 0 ? 1000000 + scored : 0) + crosses * 120 + corner + dist + (item.name === prefer ? 0 : 8);
+    if (!best || rank < best.rank - 1e-6) best = { x, y, area, ratio, place: item.name, rank, crosses };
   }
   const box = { x: best.x, y: best.y, w: size.w, h: size.h };
-  return { x: best.x, y: best.y, overlap: best.area, ratio: best.ratio, place: best.place, leader: needsLeader(anchor, box, gap) };
+  return { x: best.x, y: best.y, overlap: best.area, ratio: best.ratio, place: best.place, crosses: best.crosses, leader: needsLeader(aim, box, gap) };
 }
 
-export const CALLOUT_CSS = `.an-callout{position:absolute;z-index:8;left:8px;top:8px;max-width:min(220px,32cqw);padding:.4em .55em;border:max(1px,.12em) solid var(--anatomy-strong);background:color-mix(in srgb,var(--anatomy-card) 94%,transparent);color:var(--anatomy-strong);font:700 13px/1.3 ui-sans-serif,system-ui,sans-serif;font-size:clamp(8px,1.05cqw,13px);pointer-events:none;box-shadow:0 6px 16px rgba(0,0,0,.12)}
+export const CALLOUT_CSS = `.an-callout{position:absolute;z-index:8;left:8px;top:8px;max-width:min(220px,32cqw);padding:.4em .55em;border:max(1px,.12em) solid var(--anatomy-strong);background:color-mix(in srgb,var(--anatomy-card) 94%,transparent);color:var(--anatomy-strong);font:700 13px/1.3 ui-sans-serif,system-ui,sans-serif;font-size:clamp(12px,1.05cqw,13px);pointer-events:none;box-shadow:0 6px 16px rgba(0,0,0,.12)}
 .an-callout[data-placed]{left:var(--an-x);top:var(--an-y)}
 .an-callout-leader{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:7}
 .an-callout-leader line{stroke:var(--anatomy-strong);stroke-width:1.25;fill:none}`;
@@ -114,6 +157,7 @@ const coverageRatio = ${coverageRatio.toString()};
 const rectGap = ${rectGap.toString()};
 const needsLeader = ${needsLeader.toString()};
 const leaderEnds = ${leaderEnds.toString()};
+const segmentHitsRect = ${segmentHitsRect.toString()};
 const placeCallout = ${placeCallout.toString()};
 const DIM = 0.35;
 function shown(el) {
@@ -197,15 +241,18 @@ function nudgeCallouts() {
     const anchorEl = preferred[0] || matches[0];
     if (!anchorEl) continue;
     const anchorBox = local(measure(anchorEl));
-    const obstacles = important.map((node) => local(measure(node))).concat(taken.map((rect) => local(rect)));
+    const core = anchorEl.getBoundingClientRect();
+    const targetBox = { x: core.left - origin.left, y: core.top - origin.top, w: core.width, h: core.height };
+    const callouts = taken.map((rect) => local(rect));
+    const obstacles = important.map((node) => local(measure(node))).concat(callouts);
     const bounds = { x: 0, y: 0, w: origin.width, h: origin.height };
     const size = { w: el.offsetWidth || 160, h: el.offsetHeight || 36 };
-    const place = placeCallout(anchorBox, size, obstacles, bounds, { prefer: el.getAttribute("data-prefer") || "above" });
+    const place = placeCallout(anchorBox, size, obstacles, bounds, { prefer: el.getAttribute("data-prefer") || "above", target: targetBox, callouts: callouts });
     el.style.left = place.x + "px";
     el.style.top = place.y + "px";
     el.setAttribute("data-placed", place.place);
     el.toggleAttribute("data-leader", place.leader);
-    drawLeader(el, origin, place, anchorBox, size);
+    drawLeader(el, origin, place, targetBox, size);
     taken.push({ left: origin.left + place.x, top: origin.top + place.y, width: size.w, height: size.h });
     moved++;
   }

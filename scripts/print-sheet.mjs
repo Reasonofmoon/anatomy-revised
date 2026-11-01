@@ -1,4 +1,4 @@
-import { PRINT_FONT_FACE, PRINT_FONT_FAMILY, PRINT_FONT_SYNTHESIS } from "../kit/print-fonts.mjs";
+import { PRINT_FONT_FACE, PRINT_FONT_FAMILY, PRINT_FONT_SYNTHESIS, PRINT_MONO_FAMILY } from "../kit/print-fonts.mjs";
 
 export const PAPER = {
   a4: { name: "A4", w: 210, h: 297, px: [794, 1123] },
@@ -209,13 +209,14 @@ ${PRINT_FONT_FACE}
 @media print{html,body{background:#fff}.ps{margin:0;box-shadow:none}}
 .ps-fig{position:relative;width:100%}
 .ps-fig>svg{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;display:block}
+.ps text,.ps tspan{font-family:${PRINT_FONT_FAMILY};font-weight:400}
 .ps-fig>svg.ps-over{overflow:visible;pointer-events:none}
 .ps-over line{stroke:#151517;stroke-width:.5px;vector-effect:non-scaling-stroke}
 .ps-over circle{fill:#151517}
 .ps-over .ps-mark{fill:none;stroke:#151517;stroke-width:.6px;stroke-dasharray:2 2;vector-effect:non-scaling-stroke}
-.ps-pin{position:absolute;transform:translate(-50%,-50%);width:3.6mm;height:3.6mm;border-radius:50%;background:#151517;color:#fff;display:grid;place-items:center;font:500 6pt/1 "Helvetica Neue",Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 0 0 .4mm #fff}
+.ps-pin{position:absolute;transform:translate(-50%,-50%);width:3.6mm;height:3.6mm;border-radius:50%;background:#151517;color:#fff;display:grid;place-items:center;font:500 6pt/1 ${PRINT_FONT_FAMILY};font-variant-numeric:tabular-nums;box-shadow:0 0 0 .4mm #fff}
 .ps-letter{background:#fff;color:#151517;box-shadow:0 0 0 .2mm #151517}
-.ps-mono{font:400 6pt/1.5 Menlo,ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:#8a8a8f}
+.ps-mono{font:400 6pt/1.5 ${PRINT_MONO_FAMILY};letter-spacing:.1em;text-transform:uppercase;color:#8a8a8f}
 .ps-fit{min-height:0;container-type:size}
 .ps-fit>.ps-fig{width:min(100cqw,calc(100cqh * var(--ps-aspect)))}
 .ps-ft{display:flex;justify-content:space-between;gap:6mm}
@@ -237,18 +238,18 @@ function posterPage(ctx, paper) {
 .ps-num:last-child{border-bottom:.15mm solid #d4d4d6}
 .ps-num b{display:block;font-size:17pt;line-height:1;letter-spacing:-.03em;font-weight:500}
 .ps-num small{font-size:7.5pt;font-weight:400;margin-left:.8mm;letter-spacing:0;color:#55555b}
-.ps-num span{display:block;margin-top:1mm;font:400 5.8pt/1.3 Menlo,ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:#8a8a8f}
+.ps-num span{display:block;margin-top:1mm;font:400 5.8pt/1.3 ${PRINT_MONO_FAMILY};letter-spacing:.08em;text-transform:uppercase;color:#8a8a8f}
 .pp-art{padding-top:6mm;display:flex;justify-content:center;align-items:flex-start}
 .pp-art>div{width:100%;height:100%}
 .pp-legend{grid-column:1/-1;margin:4mm 0 0;padding:5mm 0 0;border-top:.15mm solid #151517;list-style:none;columns:3;column-gap:6mm}
 .pp-legend li{break-inside:avoid;display:grid;grid-template-columns:6mm 1fr;margin-bottom:2.4mm}
-.pp-legend li>span{font:400 6.2pt/1.5 Menlo,ui-monospace,monospace;color:#8a8a8f}
+.pp-legend li>span{font:400 6.2pt/1.5 ${PRINT_MONO_FAMILY};color:#8a8a8f}
 .pp-legend b{display:block;font-size:7.2pt;font-weight:500;line-height:1.3}
 .pp-legend i{display:block;font-style:normal;font-size:6.6pt;line-height:1.35;color:#77777d}
 .pp .ps-ft{grid-column:1/-1;margin-top:3mm}
-.pp-wide{grid-template-columns:1fr 1fr;grid-template-rows:auto auto minmax(0,1fr) auto auto}
-.pp-wide .pp-art{grid-column:1/-1;grid-row:2;padding-top:8mm;height:auto}
-.pp-wide .pp-art>div{height:auto;container-type:normal}.pp-wide .pp-art .ps-fig{width:100%}
+.pp-wide{grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(0,1fr) auto auto auto}
+.pp-wide .pp-art{grid-column:1/-1;grid-row:2;min-height:0;padding-top:8mm;align-items:stretch;overflow:hidden}
+.pp-wide .pp-art>div{width:100%;height:100%;min-height:0}
 .pp-wide .pp-side{grid-column:1/-1;grid-row:3;padding-top:6mm;display:grid;grid-template-columns:1fr 1fr;column-gap:10mm;align-content:start}
 .pp-wide .pp-side>div{display:grid;grid-template-columns:1fr 1fr;column-gap:6mm;align-content:start}
 `;
@@ -297,13 +298,13 @@ function drawingPage(ctx, paper) {
 .pd-hd{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-end;gap:6mm;padding-bottom:5mm;border-bottom:.15mm solid #151517}
 .pd-hd h1{margin:1.6mm 0 0;font-size:17pt;font-weight:500;letter-spacing:-.015em;line-height:1.1}
 .pd-no{text-align:right;white-space:nowrap}
-.pd-no b{display:block;font:500 17pt/1.1 "Helvetica Neue",Helvetica,Arial,sans-serif;letter-spacing:-.01em;color:#151517;text-transform:none;margin-top:1.6mm}
+.pd-no b{display:block;font:500 17pt/1.1 ${PRINT_FONT_FAMILY};letter-spacing:-.01em;color:#151517;text-transform:none;margin-top:1.6mm}
 .pd-main{padding-top:7mm}
 .pd-main>.ps-fit{width:100%;height:100%}
 .pd-side{padding-top:7mm;display:flex;flex-direction:column;gap:7mm;min-height:0}
 .pd-side ol{list-style:none;margin:2.4mm 0 0;padding:0}
 .pd-side li{display:grid;grid-template-columns:6mm 1fr;font-size:7.2pt;line-height:1.25;padding:.9mm 0}
-.pd-side li span{font:400 6.4pt/1.4 Menlo,ui-monospace,monospace;color:#8a8a8f}
+.pd-side li span{font:400 6.4pt/1.4 ${PRINT_MONO_FAMILY};color:#8a8a8f}
 .pd-side dl{margin:2.4mm 0 0}
 .pd-side dl div{display:grid;grid-template-columns:18mm 1fr;font-size:7.2pt;padding:.9mm 0}
 .pd-side dt{color:#8a8a8f}.pd-side dd{margin:0}
@@ -312,7 +313,7 @@ function drawingPage(ctx, paper) {
 .pd-seq{grid-column:1/-1;padding-top:5mm;border-top:.15mm solid #151517;display:grid;grid-template-columns:repeat(${Math.max(1, steps.length)},1fr);column-gap:5mm}
 .pd-frame{height:${seqH}mm;display:grid;place-items:center;overflow:hidden}
 .pd-step p{margin:1.8mm 0 0;font-size:7pt;line-height:1.3}
-.pd-step p span{display:block;font:400 6pt/1.4 Menlo,ui-monospace,monospace;color:#8a8a8f;margin-bottom:.4mm}
+.pd-step p span{display:block;font:400 6pt/1.4 ${PRINT_MONO_FAMILY};color:#8a8a8f;margin-bottom:.4mm}
 .pd .ps-ft{grid-column:1/-1;margin-top:6mm}
 `;
   const html = `<main class="ps pd">
@@ -369,10 +370,10 @@ ${wideMain ? ".pe-left>.pe-art{flex:0 0 auto}.pe-left>.pe-art>.ps-fit{height:aut
 .pe-num{padding:2mm 0;border-top:.15mm solid #d4d4d6}
 .pe-num b{display:block;font-size:13pt;line-height:1;letter-spacing:-.025em;font-weight:500}
 .pe-num small{font-size:6.6pt;font-weight:400;margin-left:.6mm;color:#55555b;letter-spacing:0}
-.pe-num span{display:block;margin-top:.8mm;font:400 5.4pt/1.3 Menlo,ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:#8a8a8f}
+.pe-num span{display:block;margin-top:.8mm;font:400 5.4pt/1.3 ${PRINT_MONO_FAMILY};letter-spacing:.07em;text-transform:uppercase;color:#8a8a8f}
 .pe-legend{list-style:none;margin:2mm 0 0;padding:0}
 .pe-legend li{display:grid;grid-template-columns:6mm 1fr;padding:1.1mm 0;border-top:.15mm solid #ececee}
-.pe-legend li>span{font:400 6pt/1.5 Menlo,ui-monospace,monospace;color:#8a8a8f}
+.pe-legend li>span{font:400 6pt/1.5 ${PRINT_MONO_FAMILY};color:#8a8a8f}
 .pe-legend b{display:block;font-size:7pt;font-weight:500;line-height:1.3}
 .pe-legend i{display:block;font-style:normal;font-size:6.4pt;line-height:1.35;color:#77777d}
 .pe1 .ps-ft,.pe2 .ps-ft{grid-column:1/-1;margin-top:5mm}
@@ -383,7 +384,7 @@ ${wideMain ? ".pe-left>.pe-art{flex:0 0 auto}.pe-left>.pe-art>.ps-fit{height:aut
 .pe-step{display:grid;grid-template-columns:${thumb}mm 1fr;column-gap:4mm;align-items:start}
 .pe-thumb{width:${thumb}mm;height:${thumb}mm;display:grid;place-items:center;overflow:hidden;background:#f7f7f6;border-radius:1.4mm}
 .pe-thumb .ps-fig{width:${thumb}mm}
-.pe-n{font:400 6pt/1.4 Menlo,ui-monospace,monospace;color:#8a8a8f}
+.pe-n{font:400 6pt/1.4 ${PRINT_MONO_FAMILY};color:#8a8a8f}
 .pe-step h3{margin:.6mm 0 1.4mm;font-size:10pt;font-weight:500;letter-spacing:-.01em;line-height:1.2}
 .pe-step p{margin:0;font-size:7.8pt;line-height:1.5;color:#3a3a40}
 .pe-sub{margin-top:5mm;padding-top:3.4mm;border-top:.15mm solid #151517}
@@ -450,7 +451,7 @@ ${last && rows ? `<section class="pe-end"><div class="ps-mono">Specification</di
 </main>`);
   }
   const extra = `
-.pe-cont{font:400 7pt/1 Menlo,ui-monospace,monospace;color:#8a8a8f;letter-spacing:.08em;margin-left:2mm;vertical-align:middle}
+.pe-cont{font:400 7pt/1 ${PRINT_MONO_FAMILY};color:#8a8a8f;letter-spacing:.08em;margin-left:2mm;vertical-align:middle}
 .pe-asms{display:grid;grid-template-columns:1fr 1fr;column-gap:8mm;row-gap:7mm;padding-top:7mm}
 .pe-asm-art{width:${ASM_W}mm;height:${ASM_W}mm;display:grid;place-items:center;overflow:hidden;background:#f7f7f6;border-radius:1.4mm}
 .pe-asm-art .ps-fig{width:${ASM_W}mm}

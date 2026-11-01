@@ -166,8 +166,13 @@ function lineEnds({ select = null, tolerance = 1, root: rootSlack = 2, mark = 7,
   };
   const lines = [];
   let unseen = 0;
-  let scale = 1;
+  const scaleOf = (svg) => {
+    const ctm = svg && svg.getScreenCTM();
+    const value = ctm ? Math.hypot(ctm.a, ctm.b) : 0;
+    return value || 1;
+  };
   for (const el of shapes) {
+    if (el.closest(".iso-legend, .fn-legend")) continue;
     const cs = getComputedStyle(el);
     const alpha = opacityOf(el);
     const candidate = el.classList.contains("iso-line") && !skipClass.some((name) => el.classList.contains(name));
@@ -200,8 +205,6 @@ function lineEnds({ select = null, tolerance = 1, root: rootSlack = 2, mark = 7,
     }
     if (!stroked) continue;
     const owner = el.closest("svg");
-    const viewCtm = owner && owner.getScreenCTM();
-    if (viewCtm) scale = Math.hypot(viewCtm.a, viewCtm.b) || scale;
     const curveTolerance = 0.15 / Math.max(1, Math.hypot(ctm.a, ctm.b, ctm.c, ctm.d));
     const subpaths = geometryOf(el, curveTolerance).map((sub, index) => ({ ...sub, index, flat: sub.points.map(map) }));
     subpaths.forEach((sub) => {
@@ -213,7 +216,7 @@ function lineEnds({ select = null, tolerance = 1, root: rootSlack = 2, mark = 7,
       }
     });
     if (candidate) {
-      if (alpha >= least) lines.push({ el, subpaths, alpha, free: el.getAttribute("data-free") });
+      if (alpha >= least) lines.push({ el, subpaths, alpha, free: el.getAttribute("data-free"), scale: scaleOf(owner) });
       else unseen++;
     }
   }
@@ -276,9 +279,10 @@ function lineEnds({ select = null, tolerance = 1, root: rootSlack = 2, mark = 7,
   };
   const problems = [];
   let ends = 0;
-  const slack = tolerance * scale;
-  const rooted = rootSlack * scale;
   for (const line of lines) {
+    const scale = line.scale || 1;
+    const slack = tolerance * scale;
+    const rooted = rootSlack * scale;
     for (const sub of line.subpaths) {
       if (sub.closed || sub.flat.length < 2) continue;
       const first = sub.flat[0];

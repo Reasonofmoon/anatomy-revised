@@ -64,6 +64,19 @@ test("secondary text has its own minimum and text scrolled off a strip is not vi
   assert.doesNotMatch(strip.stdout, /Offscreen/);
 });
 
+test("callout text under 12px fails the legibility gate", async () => {
+  const small = `${closed}<div class="an-callout" style="position:absolute;left:8px;top:8px;font:8px/1.3 sans-serif">Object O</div>`;
+  const failed = await run(lines, small, []);
+  assert.equal(failed.code, 1);
+  assert.match(failed.stdout, /callout text/);
+  assert.match(failed.stdout, /under 12px/);
+  assert.match(failed.stdout, /Object O/);
+  const ok = `${closed}<div class="an-callout" style="position:absolute;left:8px;top:8px;font:12px/1.3 sans-serif">Object O</div>`;
+  const passed = await run(lines, ok, []);
+  assert.equal(passed.code, 0, passed.stdout + passed.stderr);
+  assert.match(passed.stdout, /callout text at least 12px/);
+});
+
 test("a callout that covers a marked word fails", async () => {
   const html = `${closed}<div data-important="subject" style="position:absolute;left:30px;top:40px;width:100px;height:48px;background:#FDE68A">Tom</div><div data-callout="note" style="position:absolute;left:30px;top:40px;width:100px;height:48px">this covers Tom</div>`;
   const checked = await run(lines, html, []);

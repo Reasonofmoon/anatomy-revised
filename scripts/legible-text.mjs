@@ -23,6 +23,7 @@ function legibleText() {
   const faceWarnPx = 12;
   const secondaryDesktopPx = 6;
   const secondaryNarrowPx = 5;
+  const calloutPx = 12;
   const min = innerWidth >= desktopAt ? desktopPx : narrowPx;
   const secondaryMin = innerWidth >= desktopAt ? secondaryDesktopPx : secondaryNarrowPx;
   const shown = (el) => {
@@ -57,19 +58,21 @@ function legibleText() {
   };
   const seen = new Set();
   const rows = [];
-  for (const el of document.querySelectorAll("[data-legible], .fn-word, .iso-face-text")) {
+  for (const el of document.querySelectorAll("[data-legible], .fn-word, .iso-face-text, .an-callout")) {
     if (seen.has(el) || !shown(el)) continue;
     seen.add(el);
-    const secondary = el.getAttribute("data-legible") === "secondary";
-    const hard = !secondary && el.matches("[data-legible], .fn-word");
-    const px = el.getBoundingClientRect().height;
-    const required = secondary ? secondaryMin : hard ? min : faceWarnPx;
+    const callout = el.matches(".an-callout");
+    const secondary = !callout && el.getAttribute("data-legible") === "secondary";
+    const hard = !callout && !secondary && el.matches("[data-legible], .fn-word");
+    const px = callout ? parseFloat(getComputedStyle(el).fontSize) : el.getBoundingClientRect().height;
+    const required = callout ? calloutPx : secondary ? secondaryMin : hard ? min : faceWarnPx;
     rows.push({
       text: (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 48),
       px: Math.round(px * 10) / 10,
       required,
       hard,
       secondary,
+      callout,
       ok: px + 0.49 >= required,
     });
   }
@@ -82,7 +85,10 @@ function legibleText() {
     secondary: rows.filter((row) => row.secondary).length,
     failures: rows.filter((row) => row.hard && !row.ok),
     secondaryFailures: rows.filter((row) => row.secondary && !row.ok),
-    warnings: rows.filter((row) => !row.hard && !row.secondary && !row.ok),
+    callouts: rows.filter((row) => row.callout).length,
+    calloutMin: calloutPx,
+    calloutFailures: rows.filter((row) => row.callout && !row.ok),
+    warnings: rows.filter((row) => !row.hard && !row.secondary && !row.callout && !row.ok),
     folded: Boolean(layer && layer.getAttribute("data-fold-state") === "folded"),
     fold: Boolean(layer),
     width: innerWidth,
@@ -110,6 +116,15 @@ export function reportLegible(result) {
     lines.push(foldedNote);
   } else if (result.fold) {
     lines.push("legible: warning · a fold layer is present but no teaching text is visible.");
+  }
+  if (result.calloutFailures?.length) {
+    failed = true;
+    const count = result.calloutFailures.length;
+    const floor = result.calloutMin || result.calloutFailures[0].required;
+    lines.push(`legible: FAIL · ${count} callout text${count === 1 ? "" : "s"} under ${floor}px`);
+    for (const row of result.calloutFailures) lines.push(`  "${row.text}" is ${row.px}px, under ${row.required}px`);
+  } else if (result.callouts) {
+    lines.push(`legible: callout text at least ${result.calloutMin || 12}px`);
   }
   if (result.secondaryFailures?.length) {
     failed = true;

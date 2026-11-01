@@ -1,7 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { FORMATS, PAPER, boxOf, detailedPlan, fitAspect, focusCrop, layerTable, pagesOf, paperChoice, pinLeader, relax, sheetHtml } from "./print-sheet.mjs";
 import { captureScript } from "./print.mjs";
+
+const execute = promisify(execFile);
+const drive = fileURLToPath(new URL("drive.mjs", import.meta.url));
 
 const layer = (id) => `<g class="it" data-print-part="${id}" style="--anatomy-hi:var(--on-${id}-hi,var(--part-hi,#26262a));display:var(--show-${id},inline)"><path d="M0 0L10 10"/></g>`;
 
@@ -116,6 +125,64 @@ test("Letter paper changes the page size and unknown formats throw", () => {
   assert.throws(() => sheetHtml(fakeCapture(), SPEC, PAPER.a4, "zine"), /unknown format/);
 });
 
+test("a landscape poster keeps every content box inside the printable area", async () => {
+  const view = {
+    vb: [0, 0, 700, 500],
+    content: [0, 0, 700, 500],
+    layers: [`<path d="M0 0H700V500H0Z"/>`],
+    boxes: {},
+    anchors: {},
+  };
+  const capture = { css: "", views: { apart: view } };
+  const spec = {
+    name: "Wide table",
+    title: "Wide table",
+    number: "AN-1",
+    tagline: "Landscape",
+    question: "Does the whole poster fit?",
+    lead: "The figure is only a little wider than the page is tall.",
+    quote: "Fits on one page",
+    numbers: [["1", "row", "one"], ["2", "row", "two"]],
+    parts: [
+      { id: "a", name: "Hydrogen", say: "The first tile." },
+      { id: "b", name: "Helium", say: "The second tile." },
+    ],
+    main: { view: "apart", crop: [0, 0, 700, 500] },
+  };
+  const measure = `(() => {
+    const page = document.querySelector("main.ps");
+    const rect = page.getBoundingClientRect();
+    const style = getComputedStyle(page);
+    const pad = (name) => parseFloat(style[name]) || 0;
+    const limit = { left: rect.left + pad("paddingLeft"), top: rect.top + pad("paddingTop"), right: rect.right - pad("paddingRight"), bottom: rect.bottom - pad("paddingBottom") };
+    const nodes = [...page.querySelectorAll("header, aside, .pp-art, .pp-legend, footer, .ps-fig, h1, .pp-q, .pp-lead")];
+    const over = [];
+    for (const el of nodes) {
+      const box = el.getBoundingClientRect();
+      if (box.width < 1 && box.height < 1) continue;
+      const past = Math.max(limit.left - box.left, limit.top - box.top, box.right - limit.right, box.bottom - limit.bottom);
+      if (past > 1) over.push({ cls: String(el.className).slice(0, 40), past: Math.round(past * 10) / 10 });
+    }
+    return { wide: page.classList.contains("pp-wide"), over, contentH: Math.round(limit.bottom - limit.top) };
+  })()`;
+  const directory = await mkdtemp(join(tmpdir(), "anatomy-poster-"));
+  try {
+    for (const paper of [PAPER.a4Landscape, PAPER.letterLandscape]) {
+      const page = join(directory, `${paper.name}.html`);
+      const actions = join(directory, `${paper.name}.json`);
+      await writeFile(page, sheetHtml(capture, spec, paper, "poster"));
+      await writeFile(actions, JSON.stringify([["eval", measure]]));
+      const result = await execute(process.execPath, [drive, page, "--actions", actions, "--width", "1400", "--height", "1000", "--no-webgl"], { timeout: 30000 });
+      const line = result.stdout.split("\n").find((item) => item.startsWith("eval: "));
+      const measured = JSON.parse(line.slice(6));
+      assert.equal(measured.wide, true, paper.name);
+      assert.deepEqual(measured.over, [], `${paper.name} overflows the printable area`);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("landscape paper is A4 or Letter turned on its side", () => {
   assert.deepEqual(paperChoice({ landscape: true }), PAPER.a4Landscape);
   assert.deepEqual(paperChoice({ letter: true, landscape: true }), PAPER.letterLandscape);
@@ -147,6 +214,8 @@ test("captureScript is one expression that carries the part selectors and copies
   assert.ok(!script.includes('"id":"x"'));
   assert.match(script, /paintedStyle/);
   assert.match(script, /function inlinePaint/);
+  assert.match(script, /Anatomy Latin, Anatomy Hangul, sans-serif/);
+  assert.match(script, /localName === "text"/);
 });
 
 test("detailed grows from 2 to 4 pages with steps and assemblies, under a cap", () => {
@@ -173,5 +242,12 @@ test("poster titles keep wrapped CJK from colliding and prefer an outline Korean
   assert.match(html, /font-weight:700/);
   assert.match(html, /font-synthesis:none/);
   assert.match(html, /local\("NanumGothicBold"\)/);
+  assert.match(html, /local\("NotoSans-Regular"\)/);
+  assert.match(html, /local\("Arimo-Regular"\)/);
+  assert.match(html, /local\("NotoSans-Bold"\)/);
+  assert.match(html, /Anatomy Latin/);
+  assert.match(html, /font-weight:500/);
+  assert.match(html, /font:500 6pt\/1 "Anatomy Hangul","Anatomy Latin"/);
+  assert.doesNotMatch(html, /font:500 6pt\/1 "Helvetica Neue"/);
   assert.match(html, /문장 조립 라인/);
 });

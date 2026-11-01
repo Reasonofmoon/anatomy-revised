@@ -17,12 +17,9 @@ export const SHEET_LABELS = {
 
 function marked(mark, text) {
   const prefix = String(mark || "").trim();
-  const body = String(text || "").trim();
+  let body = String(text || "").trim();
   if (!prefix) return escapeHtml(body);
-  if (body === prefix || body.startsWith(`${prefix} `) || (prefix && body.startsWith(prefix))) {
-    const rest = body.slice(prefix.length).trim();
-    return `<b>${escapeHtml(prefix)}</b>${rest ? ` ${escapeHtml(rest)}` : ""}`;
-  }
+  if (body.includes(prefix)) body = body.split(prefix).join(" ").replace(/\s+/g, " ").trim();
   return `<b>${escapeHtml(prefix)}</b>${body ? ` ${escapeHtml(body)}` : ""}`;
 }
 
